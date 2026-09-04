@@ -56,9 +56,6 @@ android {
 }
 
 repositories {
-  // A local build of the engine wins over the published one, so the two repos
-  // can be developed together with `publishToMavenLocal`.
-  mavenLocal()
   google()
   mavenCentral()
 }
