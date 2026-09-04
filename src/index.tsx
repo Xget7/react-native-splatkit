@@ -1,0 +1,1 @@
+export { SplatkitView } from './SplatkitView';
