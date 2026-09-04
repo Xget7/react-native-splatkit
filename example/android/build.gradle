@@ -1,7 +1,7 @@
 buildscript {
     ext {
         buildToolsVersion = "36.0.0"
-        minSdkVersion = 24
+        minSdkVersion = 29
         compileSdkVersion = 36
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
@@ -15,6 +15,16 @@ buildscript {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+allprojects {
+    repositories {
+        // Gradle resolves a transitive dependency with the consuming project's
+        // repositories, not the library's, so the app needs this too. It lets the
+        // example run against a `publishToMavenLocal` build of the engine, which
+        // is how the two repositories are developed together.
+        mavenLocal()
     }
 }
 

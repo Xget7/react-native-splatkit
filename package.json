@@ -40,8 +40,15 @@
   },
   "keywords": [
     "react-native",
+    "android",
     "ios",
-    "android"
+    "gaussian-splatting",
+    "splat",
+    "spz",
+    "vulkan",
+    "3d",
+    "renderer",
+    "radiance-fields"
   ],
   "repository": {
     "type": "git",
@@ -102,16 +109,16 @@
     ]
   },
   "codegenConfig": {
-    "name": "SplatkitViewSpec",
+    "name": "SplatViewSpec",
     "type": "all",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.splatkit"
+      "javaPackageName": "com.splatkit.reactnative"
     },
     "ios": {
       "components": {
-        "SplatkitView": {
-          "className": "SplatkitView"
+        "SplatView": {
+          "className": "SplatView"
         }
       }
     }

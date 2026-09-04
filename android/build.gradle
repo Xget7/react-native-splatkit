@@ -1,8 +1,13 @@
 buildscript {
   ext.Splatkit = [
-    kotlinVersion: "2.0.21",
-    minSdkVersion: 24,
-    compileSdkVersion: 36
+    kotlinVersion: "2.1.21",
+    // The engine needs Android 10 and Vulkan 1.1; there is no fallback renderer
+    // below that, so the floor is the engine's floor and not React Native's.
+    minSdkVersion: 29,
+    compileSdkVersion: 36,
+    // The one coupling between this package and the engine. Nothing else about
+    // the renderer is visible from here.
+    splatkitVersion: "0.1.0-alpha02"
   ]
 
   ext.getExtOrDefault = { prop ->
@@ -32,7 +37,7 @@ apply plugin: "kotlin-android"
 apply plugin: "com.facebook.react"
 
 android {
-  namespace "com.splatkit"
+  namespace "com.splatkit.reactnative"
 
   compileSdkVersion getExtOrDefault("compileSdkVersion")
 
@@ -44,8 +49,24 @@ android {
     sourceCompatibility JavaVersion.VERSION_17
     targetCompatibility JavaVersion.VERSION_17
   }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+}
+
+repositories {
+  // A local build of the engine wins over the published one, so the two repos
+  // can be developed together with `publishToMavenLocal`.
+  mavenLocal()
+  google()
+  mavenCentral()
 }
 
 dependencies {
   implementation "com.facebook.react:react-android"
+  // The engine arrives as a published artifact. This package holds no renderer,
+  // no shaders and no native code of its own; it only puts the engine's view in
+  // a React Native tree.
+  api "io.github.xget7:splatkit-android:${getExtOrDefault('splatkitVersion')}"
 }

@@ -1,37 +1,110 @@
 # react-native-splatkit
 
-Walkable Gaussian splat worlds in React Native, rendered with Vulkan on Android.
-
-## Installation
-
+Walkable Gaussian splat worlds in React Native.
+Load a World Labs Marble `.spz`, put a `<SplatView />` in a tree, and walk through the scene.
 
 ```sh
 npm install react-native-splatkit
 ```
 
+## What this package is
 
-## Usage
+A binding, and nothing more.
+The renderer lives in [SplatKit](https://github.com/Xget7/splatkit), an Android engine published to Maven Central, and this package depends on it the way any Android app would:
 
-
-```js
-import { SplatkitView } from "react-native-splatkit";
-
-// ...
-
-<SplatkitView color="tomato" />
+```gradle
+api "io.github.xget7:splatkit-android:0.1.0-alpha02"
 ```
 
+There is no C++ here, no shaders, no copy of the engine.
+A fix to the renderer is a new version of that artifact, not a release of this package, and an Android developer can work on the engine without ever installing Node.
 
-## Contributing
+## Use it
 
-- [Development workflow](CONTRIBUTING.md#development-workflow)
-- [Sending a pull request](CONTRIBUTING.md#sending-a-pull-request)
-- [Code of conduct](CODE_OF_CONDUCT.md)
+```tsx
+import { SplatView } from 'react-native-splatkit';
+
+<SplatView
+  style={StyleSheet.absoluteFill}
+  source={{ uri: 'file:///sdcard/Download/world.spz' }}
+  collider={{ uri: 'file:///sdcard/Download/collider.glb' }}
+  renderScale={0.7}
+  onEngineReady={(e) => console.log(e.nativeEvent.gpu)}
+  onWorldReady={(e) => console.log(e.nativeEvent.splatCount, 'splats')}
+/>;
+```
+
+The view has to have a size.
+A surface with no height renders nothing and reports no error, so give it `flex: 1` or explicit dimensions.
+
+One finger looks around, two fingers walk, a double tap toggles the gyroscope.
+Without a collider the camera flies; with one it walks on the mesh.
+World Labs exports both files for every world.
+
+### Sources
+
+The bytes never cross the bridge.
+JavaScript hands over a location and the native side reads it on a background thread, because a world is tens to hundreds of megabytes and serialising that would stall the app for as long as it took.
+
+`file://`, `content://`, `asset://` for a file in the app assets, `http://`, `https://`, or an absolute path.
+
+### Props
+
+| Prop | What it does |
+|---|---|
+| `source` | The world. SPZ versions 2 to 4; the format is detected from the bytes. |
+| `collider` | A GLB mesh. Switches the camera from flying to walking. |
+| `renderScale` | Fraction of the surface the splats are drawn at, then upscaled. 0.7 is hard to tell from 1.0 and much cheaper. |
+| `splatBudget` | Most splats drawn per frame through a level of detail tree. 0, the default, draws them all. |
+| `maxShDegree` | Highest spherical harmonics degree kept from the file, 0 to 3. Degree 3 costs 92 bytes per splat of GPU memory. |
+| `linearBlending` | Blend in linear space rather than sRGB. |
+| `motionEnabled` | The gyroscope drives the look direction. |
+| `lookSensitivity`, `walkSensitivity` | Gesture tuning. |
+| `statsInterval` | Milliseconds between `onStats`. 0, the default, turns the event off. |
+
+### Events
+
+`onEngineReady` fires once with `{ available, gpu }`.
+When `available` is false the device could not start the renderer and the view stays blank; every other call is a no-op.
+
+`onWorldReady` gives `{ splatCount }`, `onWorldFailed` and `onColliderFailed` give `{ message }`, `onColliderReady` takes no payload, and `onStats` gives `{ fps, frameMs, gpuMs, sortMs, splatCount }`.
+
+### Imperative
+
+```tsx
+const splat = useRef<SplatViewHandle>(null);
+
+splat.current?.setWalkVelocity(forward, right); // meters per second, for a joystick
+splat.current?.startBenchmark(10);              // a reproducible turn, timings in logcat
+```
+
+## Requirements
+
+New architecture only.
+Android 10 (API 29) and a Vulkan 1.1 device, `arm64-v8a` only: the engine ships that ABI alone, so an x86_64 emulator installs and then dies on the first frame.
+Develop on a physical arm64 device.
+
+## iOS
+
+The component, its props and its events exist on iOS and compile, but there is no engine behind them yet.
+`onEngineReady` reports `available: false`, which is the same signal an Android device without Vulkan gives, so an app that already handles that case needs no extra branch.
+
+iOS will link a published SplatKit package the same way Android links the AAR.
+Copying a renderer into this repository would defeat the point of the split.
+
+## Running the example
+
+The example reads a world off the device rather than committing one:
+
+```sh
+adb push kitchen.spz /sdcard/Download/world.spz
+adb push kitchen.glb /sdcard/Download/collider.glb
+yarn && yarn example android
+```
+
+Everything from the engine logs under the tag `SplatKit`.
+MIUI hides application logs until `adb shell setprop persist.log.tag.SplatKit V`.
 
 ## License
 
-MIT
-
----
-
-Made with [create-react-native-library](https://github.com/callstack/react-native-builder-bob)
+MIT.
