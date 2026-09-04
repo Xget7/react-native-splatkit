@@ -50,11 +50,8 @@ export interface NativeProps extends ViewProps {
 
   /** Fraction of the surface the splats are drawn at before upscaling. 0.7 is hard to tell from 1.0 and much cheaper. */
   renderScale?: CodegenTypes.WithDefault<CodegenTypes.Double, 1.0>;
-  /** Most splats drawn per frame through the level of detail tree. 0 draws them all. */
-  splatBudget?: CodegenTypes.WithDefault<CodegenTypes.Int32, 0>;
   /** Highest spherical harmonics degree kept from the file, 0 to 3. */
   maxShDegree?: CodegenTypes.WithDefault<CodegenTypes.Int32, 3>;
-  linearBlending?: CodegenTypes.WithDefault<boolean, false>;
 
   /** The gyroscope drives the look direction. */
   motionEnabled?: CodegenTypes.WithDefault<boolean, false>;

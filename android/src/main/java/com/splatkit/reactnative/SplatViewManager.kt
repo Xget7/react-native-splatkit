@@ -43,19 +43,9 @@ class SplatViewManager :
         view.setRenderScale(value.toFloat())
     }
 
-    @ReactProp(name = "splatBudget", defaultInt = 0)
-    override fun setSplatBudget(view: SplatKitView, value: Int) {
-        view.setSplatBudget(value)
-    }
-
     @ReactProp(name = "maxShDegree", defaultInt = 3)
     override fun setMaxShDegree(view: SplatKitView, value: Int) {
         view.setMaxShDegree(value)
-    }
-
-    @ReactProp(name = "linearBlending", defaultBoolean = false)
-    override fun setLinearBlending(view: SplatKitView, value: Boolean) {
-        view.setLinearBlending(value)
     }
 
     @ReactProp(name = "motionEnabled", defaultBoolean = false)

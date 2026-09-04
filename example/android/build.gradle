@@ -18,13 +18,19 @@ buildscript {
     }
 }
 
-allprojects {
-    repositories {
-        // Gradle resolves a transitive dependency with the consuming project's
-        // repositories, not the library's, so the app needs this too. It lets the
-        // example run against a `publishToMavenLocal` build of the engine, which
-        // is how the two repositories are developed together.
-        mavenLocal()
+// Opt in with -Psplatkit.useMavenLocal=true to run the example against a
+// `publishToMavenLocal` build of the engine, for developing the two repositories
+// together. It is off by default on purpose: a local build silently outranking
+// the published artifact makes the example pass against an engine nobody else
+// has, which is a hard failure to see and an easy one to ship.
+if (project.hasProperty("splatkit.useMavenLocal")) {
+    allprojects {
+        repositories {
+            // Gradle resolves a transitive dependency with the consuming
+            // project's repositories, not the library's, so the app needs this
+            // and not just the library module.
+            mavenLocal()
+        }
     }
 }
 

@@ -55,9 +55,7 @@ JavaScript hands over a location and the native side reads it on a background th
 | `source` | The world. SPZ versions 2 to 4; the format is detected from the bytes. |
 | `collider` | A GLB mesh. Switches the camera from flying to walking. |
 | `renderScale` | Fraction of the surface the splats are drawn at, then upscaled. 0.7 is hard to tell from 1.0 and much cheaper. |
-| `splatBudget` | Most splats drawn per frame through a level of detail tree. 0, the default, draws them all. |
 | `maxShDegree` | Highest spherical harmonics degree kept from the file, 0 to 3. Degree 3 costs 92 bytes per splat of GPU memory. |
-| `linearBlending` | Blend in linear space rather than sRGB. |
 | `motionEnabled` | The gyroscope drives the look direction. |
 | `lookSensitivity`, `walkSensitivity` | Gesture tuning. |
 | `statsInterval` | Milliseconds between `onStats`. 0, the default, turns the event off. |

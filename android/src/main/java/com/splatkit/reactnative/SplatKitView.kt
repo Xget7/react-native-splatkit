@@ -179,9 +179,7 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     }
 
     fun setRenderScale(value: Float) { surface.renderScale = value }
-    fun setSplatBudget(value: Int) { surface.splatBudget = value }
     fun setMaxShDegree(value: Int) { surface.maxShDegree = value }
-    fun setLinearBlending(value: Boolean) { surface.linearBlending = value }
     fun setLookSensitivity(value: Float) { surface.lookSensitivity = value }
     fun setWalkSensitivity(value: Float) { surface.walkSensitivity = value }
     fun setMotionEnabled(value: Boolean) = surface.setMotionEnabled(value)
