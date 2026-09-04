@@ -13,13 +13,18 @@ import { SplatView, type SplatViewHandle } from 'react-native-splatkit';
 /**
  * Worlds are far too big to commit, so the example reads them off the device.
  *
- *   adb push kitchen.spz /sdcard/Download/world.spz
- *   adb push kitchen.glb /sdcard/Download/collider.glb
+ *   adb push kitchen.spz /sdcard/Android/data/splatkit.example/files/world.spz
+ *   adb push kitchen.glb /sdcard/Android/data/splatkit.example/files/collider.glb
+ *
+ * This is the app's own directory, readable with no runtime permission.
+ * /sdcard/Download needs READ_EXTERNAL_STORAGE from API 29 on, which an example
+ * should not have to ask for just to show a renderer.
  *
  * Without the collider the camera flies instead of walking.
  */
-const WORLD = { uri: 'file:///sdcard/Download/world.spz' };
-const COLLIDER = { uri: 'file:///sdcard/Download/collider.glb' };
+const FILES = 'file:///sdcard/Android/data/splatkit.example/files';
+const WORLD = { uri: `${FILES}/world.spz` };
+const COLLIDER = { uri: `${FILES}/collider.glb` };
 
 const JOYSTICK_RADIUS = 60;
 const WALK_SPEED = 1.6;

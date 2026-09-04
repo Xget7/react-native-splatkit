@@ -40,8 +40,11 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     private val io = Executors.newSingleThreadExecutor { Thread(it, "SplatKitRnIo") }
 
     // A source that arrives while an older one is still being read must win, and
-    // the older result must be dropped rather than replace it.
-    private val loadGeneration = AtomicLong(0)
+    // the older result must be dropped rather than replace it. The world and the
+    // collider are independent, so they count separately; one shared counter
+    // would let setting the collider discard a world still being read.
+    private val worldGeneration = AtomicLong(0)
+    private val colliderGeneration = AtomicLong(0)
 
     // resume() restarts the sensor listener, so the transitions are tracked here
     // instead of being handed to the engine twice.
@@ -129,30 +132,36 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     fun setSource(uri: String?) {
         if (uri == currentWorldUri) return
         currentWorldUri = uri
-        load(uri) { surface.loadWorld(it) }
+        load(uri, worldGeneration, "topWorldFailed") { surface.loadWorld(it) }
     }
 
     fun setCollider(uri: String?) {
         if (uri == currentColliderUri) return
         currentColliderUri = uri
-        load(uri) { surface.loadCollider(it) }
+        load(uri, colliderGeneration, "topColliderFailed") { surface.loadCollider(it) }
     }
 
-    private fun load(uri: String?, hand: (ByteArray) -> Unit) {
+    private fun load(
+        uri: String?,
+        generations: AtomicLong,
+        failureEvent: String,
+        hand: (ByteArray) -> Unit,
+    ) {
         if (uri.isNullOrEmpty()) return
-        val generation = loadGeneration.incrementAndGet()
+        val generation = generations.incrementAndGet()
         io.execute {
             val bytes = try {
                 readBytes(uri)
             } catch (e: Exception) {
+                if (generation != generations.get()) return@execute
                 main.post {
-                    emit("topWorldFailed", Arguments.createMap().apply {
+                    emit(failureEvent, Arguments.createMap().apply {
                         putString("message", "${e.javaClass.simpleName}: ${e.message} ($uri)")
                     })
                 }
                 return@execute
             }
-            if (generation != loadGeneration.get()) return@execute
+            if (generation != generations.get()) return@execute
             main.post { hand(bytes) }
         }
     }

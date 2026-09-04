@@ -95,10 +95,13 @@ Copying a renderer into this repository would defeat the point of the split.
 The example reads a world off the device rather than committing one:
 
 ```sh
-adb push kitchen.spz /sdcard/Download/world.spz
-adb push kitchen.glb /sdcard/Download/collider.glb
+adb push kitchen.spz /sdcard/Android/data/splatkit.example/files/world.spz
+adb push kitchen.glb /sdcard/Android/data/splatkit.example/files/collider.glb
 yarn && yarn example android
 ```
+
+That is the app's own directory, so it needs no runtime permission.
+Reading `/sdcard/Download` instead means asking for `READ_EXTERNAL_STORAGE`, which is the host app's decision to make, not this package's.
 
 Everything from the engine logs under the tag `SplatKit`.
 MIUI hides application logs until `adb shell setprop persist.log.tag.SplatKit V`.
