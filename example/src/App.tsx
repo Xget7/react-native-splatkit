@@ -2,13 +2,19 @@ import { useRef, useState } from 'react';
 import {
   PanResponder,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   View,
   type GestureResponderEvent,
   type PanResponderGestureState,
 } from 'react-native';
-import { SplatView, type SplatViewHandle } from 'react-native-splatkit';
+import {
+  SplatView,
+  type CameraPose,
+  type QualityPreset,
+  type SplatViewHandle,
+} from 'react-native-splatkit';
 
 /**
  * Worlds are far too big to commit, so the example reads them off the device.
@@ -28,12 +34,14 @@ const COLLIDER = { uri: `${FILES}/collider.glb` };
 
 const JOYSTICK_RADIUS = 60;
 const WALK_SPEED = 1.6;
+const PRESETS: QualityPreset[] = ['low', 'medium', 'high', 'ultra'];
 
 type Stats = {
   fps: number;
   frameMs: number;
   gpuMs: number;
   splatCount: number;
+  pose: CameraPose;
 };
 
 export default function App() {
@@ -42,6 +50,10 @@ export default function App() {
   const [status, setStatus] = useState('waiting for a world');
   const [stats, setStats] = useState<Stats | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const [preset, setPreset] = useState<QualityPreset>('medium');
+  // Where the world was captured; the engine puts the camera there on load and
+  // the button below brings it back.
+  const home = useRef<CameraPose | null>(null);
 
   const walk = (gesture: PanResponderGestureState) => {
     const clamp = (v: number) =>
@@ -77,7 +89,7 @@ export default function App() {
         style={StyleSheet.absoluteFill}
         source={WORLD}
         collider={COLLIDER}
-        renderScale={0.7}
+        quality={preset}
         motionEnabled={false}
         statsInterval={500}
         onEngineReady={(e) =>
@@ -97,7 +109,10 @@ export default function App() {
         onColliderFailed={(e) =>
           setStatus((s) => `${s}, flying (${e.nativeEvent.message})`)
         }
-        onStats={(e) => setStats(e.nativeEvent)}
+        onStats={(e) => {
+          if (home.current == null) home.current = e.nativeEvent.pose;
+          setStats(e.nativeEvent);
+        }}
       />
 
       <View style={styles.hud} pointerEvents="none">
@@ -105,10 +120,38 @@ export default function App() {
         <Text style={styles.line}>{status}</Text>
         {stats != null && (
           <Text style={styles.line}>
-            {stats.fps.toFixed(0)} fps · {stats.frameMs.toFixed(1)} ms frame ·{' '}
-            {stats.gpuMs.toFixed(1)} ms gpu
+            {stats.fps > 0
+              ? `${stats.fps.toFixed(0)} fps · ${stats.frameMs.toFixed(1)} ms frame · ${stats.gpuMs.toFixed(1)} ms gpu`
+              : 'idle, nothing changed since the last frame'}
           </Text>
         )}
+        {stats != null && (
+          <Text style={styles.line}>
+            {stats.pose.x.toFixed(2)}, {stats.pose.y.toFixed(2)},{' '}
+            {stats.pose.z.toFixed(2)} · yaw {stats.pose.yaw?.toFixed(2)}
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.presets}>
+        {PRESETS.map((p) => (
+          <Pressable
+            key={p}
+            onPress={() => setPreset(p)}
+            style={[styles.chip, p === preset && styles.chipOn]}
+          >
+            <Text style={styles.chipText}>{p}</Text>
+          </Pressable>
+        ))}
+        <Pressable
+          onPress={() => {
+            if (home.current != null)
+              splat.current?.setCameraPose(home.current);
+          }}
+          style={styles.chip}
+        >
+          <Text style={styles.chipText}>home</Text>
+        </Pressable>
       </View>
 
       <View style={styles.joystick} {...joystick.panHandlers}>
@@ -139,6 +182,22 @@ const styles = StyleSheet.create({
     textShadowColor: '#000',
     textShadowRadius: 3,
   },
+  presets: {
+    position: 'absolute',
+    right: 16,
+    bottom: 48,
+    gap: 8,
+    alignItems: 'flex-end',
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  chipOn: { backgroundColor: 'rgba(255,255,255,0.35)' },
+  chipText: { color: '#fff', fontSize: 12 },
   joystick: {
     position: 'absolute',
     left: 32,

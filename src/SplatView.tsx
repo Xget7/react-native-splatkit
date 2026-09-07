@@ -5,9 +5,24 @@ import NativeSplatView, {
   type NativeProps,
 } from './SplatViewNativeComponent';
 
-export type { SplatSource } from './SplatViewNativeComponent';
+export type {
+  SplatSource,
+  QualitySettings,
+  CameraPose,
+} from './SplatViewNativeComponent';
+import type { QualitySettings, CameraPose } from './SplatViewNativeComponent';
 
-export type SplatViewProps = Omit<NativeProps, keyof ViewProps> & ViewProps;
+export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra';
+
+export type SplatViewProps = Omit<NativeProps, keyof ViewProps | 'quality'> &
+  ViewProps & {
+    /**
+     * A preset name, or a preset plus overrides:
+     * `quality="medium"` or `quality={{ preset: 'medium', renderScale: 0.8 }}`.
+     * `high` when omitted.
+     */
+    quality?: QualityPreset | QualitySettings;
+  };
 
 export type SplatViewHandle = {
   /**
@@ -16,6 +31,12 @@ export type SplatViewHandle = {
    * zeroes when the finger lifts.
    */
   setWalkVelocity: (forward: number, right: number) => void;
+  /**
+   * Teleport. Position in meters, yaw and pitch in radians; when walking the
+   * camera settles on the floor under the point. The `cameraPose` prop does the
+   * same declaratively; use this for a "go here" button.
+   */
+  setCameraPose: (pose: CameraPose) => void;
   /** A reproducible turn. The frame time distribution lands in logcat under the tag SplatKit. */
   startBenchmark: (seconds?: number) => void;
 };
@@ -27,7 +48,7 @@ export type SplatViewHandle = {
  * and reports no error, so give it `flex: 1` or explicit dimensions.
  */
 const SplatViewComponent = forwardRef<SplatViewHandle, SplatViewProps>(
-  (props, ref) => {
+  ({ quality, ...props }, ref) => {
     const nativeRef = useRef<React.ElementRef<typeof NativeSplatView>>(null);
 
     useImperativeHandle(ref, () => ({
@@ -35,13 +56,19 @@ const SplatViewComponent = forwardRef<SplatViewHandle, SplatViewProps>(
         if (nativeRef.current == null) return;
         Commands.setWalkVelocity(nativeRef.current, forward, right);
       },
+      setCameraPose({ x, y, z, yaw = 0, pitch = 0 }: CameraPose) {
+        if (nativeRef.current == null) return;
+        Commands.setCameraPose(nativeRef.current, x, y, z, yaw, pitch);
+      },
       startBenchmark(seconds = 10) {
         if (nativeRef.current == null) return;
         Commands.startBenchmark(nativeRef.current, seconds);
       },
     }));
 
-    return <NativeSplatView ref={nativeRef} {...props} />;
+    const settings =
+      typeof quality === 'string' ? { preset: quality } : quality;
+    return <NativeSplatView ref={nativeRef} quality={settings} {...props} />;
   }
 );
 

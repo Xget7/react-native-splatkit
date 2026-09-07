@@ -52,6 +52,7 @@ using namespace facebook::react;
 // Commands exist so the JavaScript API is the same shape on both platforms.
 // With no engine to drive, they do nothing.
 - (void)setWalkVelocity:(double)forward right:(double)right {}
+- (void)setCameraPose:(double)x y:(double)y z:(double)z yaw:(double)yaw pitch:(double)pitch {}
 - (void)startBenchmark:(double)seconds {}
 
 @end

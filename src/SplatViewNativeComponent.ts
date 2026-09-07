@@ -28,6 +28,36 @@ type EngineReadyEvent = {
   gpu: string;
 };
 
+/**
+ * How much the renderer spends per frame. `preset` picks the engine's
+ * `RenderQuality.LOW`, `MEDIUM`, `HIGH` or `ULTRA`; every other field
+ * overrides one value of that preset. Omit a field to keep the preset's.
+ * The reason behind each preset and its frame times are in the engine's README.
+ */
+export type QualitySettings = {
+  /** `low`, `medium`, `high` (the default) or `ultra`. */
+  preset?: string;
+  /** Fraction of the surface the splats are drawn at, 0.1 to 2. Above 1 supersamples. */
+  renderScale?: CodegenTypes.Double;
+  /** Highest spherical harmonics degree kept from the file, 0 to 3. Applies to worlds loaded after it is set. */
+  maxShDegree?: CodegenTypes.Int32;
+  /** Most splats drawn per frame through the level of detail tree; 0 draws them all. Applies to worlds loaded after it is set. */
+  splatBudget?: CodegenTypes.Int32;
+  /** Angular margin around the view kept drawn so a turn never meets an empty edge. */
+  cullMarginDegrees?: CodegenTypes.Double;
+  /** Blend in linear light instead of the encoded space the training used. */
+  linearBlending?: boolean;
+};
+
+/** Where the camera stands, in meters, and where it looks, in radians. */
+export type CameraPose = {
+  x: CodegenTypes.Double;
+  y: CodegenTypes.Double;
+  z: CodegenTypes.Double;
+  yaw?: CodegenTypes.Double;
+  pitch?: CodegenTypes.Double;
+};
+
 type WorldReadyEvent = {
   splatCount: CodegenTypes.Int32;
 };
@@ -42,16 +72,28 @@ type StatsEvent = {
   gpuMs: CodegenTypes.Double;
   sortMs: CodegenTypes.Double;
   splatCount: CodegenTypes.Int32;
+  /** The camera as of the last frame. */
+  pose: {
+    x: CodegenTypes.Double;
+    y: CodegenTypes.Double;
+    z: CodegenTypes.Double;
+    yaw: CodegenTypes.Double;
+    pitch: CodegenTypes.Double;
+  };
 };
 
 export interface NativeProps extends ViewProps {
   source?: SplatSource;
   collider?: SplatSource;
 
-  /** Fraction of the surface the splats are drawn at before upscaling. 0.7 is hard to tell from 1.0 and much cheaper. */
-  renderScale?: CodegenTypes.WithDefault<CodegenTypes.Double, 1.0>;
-  /** Highest spherical harmonics degree kept from the file, 0 to 3. */
-  maxShDegree?: CodegenTypes.WithDefault<CodegenTypes.Int32, 3>;
+  /** Preset plus overrides; `high` with no overrides when omitted. */
+  quality?: QualitySettings;
+  /**
+   * Where the camera starts. Applied when it changes and again when the world
+   * and the collider become ready, so it can be set before the world loads.
+   * When walking, the camera settles on the floor under the point.
+   */
+  cameraPose?: CameraPose;
 
   /** The gyroscope drives the look direction. */
   motionEnabled?: CodegenTypes.WithDefault<boolean, false>;
@@ -78,6 +120,15 @@ interface NativeCommands {
     forward: CodegenTypes.Double,
     right: CodegenTypes.Double
   ) => void;
+  /** Teleport: position in meters, yaw and pitch in radians. */
+  setCameraPose: (
+    viewRef: React.ElementRef<SplatViewNativeComponentType>,
+    x: CodegenTypes.Double,
+    y: CodegenTypes.Double,
+    z: CodegenTypes.Double,
+    yaw: CodegenTypes.Double,
+    pitch: CodegenTypes.Double
+  ) => void;
   /** A reproducible turn; the frame time distribution lands in logcat under the tag SplatKit. */
   startBenchmark: (
     viewRef: React.ElementRef<SplatViewNativeComponentType>,
@@ -86,7 +137,7 @@ interface NativeCommands {
 }
 
 export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
-  supportedCommands: ['setWalkVelocity', 'startBenchmark'],
+  supportedCommands: ['setWalkVelocity', 'setCameraPose', 'startBenchmark'],
 });
 
 export default codegenNativeComponent<NativeProps>(

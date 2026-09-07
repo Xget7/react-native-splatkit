@@ -57,7 +57,11 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+// On in the example on purpose. R8 is what a shipped app runs, and it is where a
+// native library breaks: a renamed class or a stripped method name turns into an
+// UnsatisfiedLinkError only in release. The engine's AAR carries the rules that
+// keep its JNI surface; this proves they arrive.
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -102,6 +106,7 @@ android {
             // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }

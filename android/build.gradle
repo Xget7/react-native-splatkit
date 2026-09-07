@@ -7,7 +7,7 @@ buildscript {
     compileSdkVersion: 36,
     // The one coupling between this package and the engine. Nothing else about
     // the renderer is visible from here.
-    splatkitVersion: "0.1.0-alpha02"
+    splatkitVersion: "0.1.0-alpha03"
   ]
 
   ext.getExtOrDefault = { prop ->

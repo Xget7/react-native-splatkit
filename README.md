@@ -13,7 +13,7 @@ A binding, and nothing more.
 The renderer lives in [SplatKit](https://github.com/Xget7/splatkit), an Android engine published to Maven Central, and this package depends on it the way any Android app would:
 
 ```gradle
-api "io.github.xget7:splatkit-android:0.1.0-alpha02"
+api "io.github.xget7:splatkit-android:0.1.0-alpha03"
 ```
 
 There is no C++ here, no shaders, no copy of the engine.
@@ -28,7 +28,7 @@ import { SplatView } from 'react-native-splatkit';
   style={StyleSheet.absoluteFill}
   source={{ uri: 'file:///sdcard/Download/world.spz' }}
   collider={{ uri: 'file:///sdcard/Download/collider.glb' }}
-  renderScale={0.7}
+  quality="medium"
   onEngineReady={(e) => console.log(e.nativeEvent.gpu)}
   onWorldReady={(e) => console.log(e.nativeEvent.splatCount, 'splats')}
 />;
@@ -47,6 +47,7 @@ The bytes never cross the bridge.
 JavaScript hands over a location and the native side reads it on a background thread, because a world is tens to hundreds of megabytes and serialising that would stall the app for as long as it took.
 
 `file://`, `content://`, `asset://` for a file in the app assets, `http://`, `https://`, or an absolute path.
+A file on disk goes to the engine as a path and is mapped, not copied through the Java heap; the other schemes are read to bytes first.
 
 ### Props
 
@@ -54,8 +55,8 @@ JavaScript hands over a location and the native side reads it on a background th
 |---|---|
 | `source` | The world. SPZ versions 2 to 4; the format is detected from the bytes. |
 | `collider` | A GLB mesh. Switches the camera from flying to walking. |
-| `renderScale` | Fraction of the surface the splats are drawn at, then upscaled. 0.7 is hard to tell from 1.0 and much cheaper. |
-| `maxShDegree` | Highest spherical harmonics degree kept from the file, 0 to 3. Degree 3 costs 92 bytes per splat of GPU memory. |
+| `quality` | A preset name, `low`, `medium`, `high` (the default) or `ultra`, or a preset plus overrides: `{ preset: 'medium', renderScale: 0.8 }`. The overrides are `renderScale` (0.1 to 2, above 1 supersamples), `maxShDegree` (0 to 3), `splatBudget` (0 draws all), `cullMarginDegrees` and `linearBlending`. The reason behind each preset and its frame times are in the [engine's README](https://github.com/Xget7/splatkit/blob/main/packages/splatkit-android/README.md). |
+| `cameraPose` | `{ x, y, z, yaw?, pitch? }`, meters and radians. Applied when it changes and again when the world and the collider become ready, so it can be set before the world loads. When walking the camera settles on the floor under the point. |
 | `motionEnabled` | The gyroscope drives the look direction. |
 | `lookSensitivity`, `walkSensitivity` | Gesture tuning. |
 | `statsInterval` | Milliseconds between `onStats`. 0, the default, turns the event off. |
@@ -65,15 +66,17 @@ JavaScript hands over a location and the native side reads it on a background th
 `onEngineReady` fires once with `{ available, gpu }`.
 When `available` is false the device could not start the renderer and the view stays blank; every other call is a no-op.
 
-`onWorldReady` gives `{ splatCount }`, `onWorldFailed` and `onColliderFailed` give `{ message }`, `onColliderReady` takes no payload, and `onStats` gives `{ fps, frameMs, gpuMs, sortMs, splatCount }`.
+`onWorldReady` gives `{ splatCount }`, `onWorldFailed` and `onColliderFailed` give `{ message }`, `onColliderReady` takes no payload, and `onStats` gives `{ fps, frameMs, gpuMs, sortMs, splatCount, pose }`, where `pose` is the camera as of the last frame in the shape of `cameraPose`.
+Read it to save a viewpoint and hand it back later.
 
 ### Imperative
 
 ```tsx
 const splat = useRef<SplatViewHandle>(null);
 
-splat.current?.setWalkVelocity(forward, right); // meters per second, for a joystick
-splat.current?.startBenchmark(10);              // a reproducible turn, timings in logcat
+splat.current?.setWalkVelocity(forward, right);          // meters per second, for a joystick
+splat.current?.setCameraPose({ x: 0, y: 1.5, z: 0 });    // teleport; yaw and pitch optional
+splat.current?.startBenchmark(10);                       // a reproducible turn, timings in logcat
 ```
 
 ## Requirements

@@ -9,6 +9,7 @@ import com.facebook.react.uimanager.ViewManagerDelegate
 import com.facebook.react.uimanager.annotations.ReactProp
 import com.facebook.react.viewmanagers.SplatViewManagerDelegate
 import com.facebook.react.viewmanagers.SplatViewManagerInterface
+import com.splatkit.CameraPose
 
 @ReactModule(name = SplatViewManager.NAME)
 class SplatViewManager :
@@ -38,14 +39,14 @@ class SplatViewManager :
         view.setCollider(value?.getString("uri"))
     }
 
-    @ReactProp(name = "renderScale", defaultDouble = 1.0)
-    override fun setRenderScale(view: SplatKitView, value: Double) {
-        view.setRenderScale(value.toFloat())
+    @ReactProp(name = "quality")
+    override fun setQuality(view: SplatKitView, value: ReadableMap?) {
+        view.setQuality(value)
     }
 
-    @ReactProp(name = "maxShDegree", defaultInt = 3)
-    override fun setMaxShDegree(view: SplatKitView, value: Int) {
-        view.setMaxShDegree(value)
+    @ReactProp(name = "cameraPose")
+    override fun setCameraPose(view: SplatKitView, value: ReadableMap?) {
+        view.setDeclaredPose(value?.let(::poseOf))
     }
 
     @ReactProp(name = "motionEnabled", defaultBoolean = false)
@@ -72,6 +73,17 @@ class SplatViewManager :
         view.setWalkVelocity(forward.toFloat(), right.toFloat())
     }
 
+    override fun setCameraPose(
+        view: SplatKitView,
+        x: Double,
+        y: Double,
+        z: Double,
+        yaw: Double,
+        pitch: Double,
+    ) {
+        view.teleport(CameraPose(x.toFloat(), y.toFloat(), z.toFloat(), yaw.toFloat(), pitch.toFloat()))
+    }
+
     override fun startBenchmark(view: SplatKitView, seconds: Double) {
         view.startBenchmark(seconds.toFloat())
     }
@@ -96,5 +108,13 @@ class SplatViewManager :
 
     companion object {
         const val NAME = "SplatView"
+
+        private fun poseOf(map: ReadableMap) = CameraPose(
+            x = map.getDouble("x").toFloat(),
+            y = map.getDouble("y").toFloat(),
+            z = map.getDouble("z").toFloat(),
+            yaw = if (map.hasKey("yaw")) map.getDouble("yaw").toFloat() else 0f,
+            pitch = if (map.hasKey("pitch")) map.getDouble("pitch").toFloat() else 0f,
+        )
     }
 }

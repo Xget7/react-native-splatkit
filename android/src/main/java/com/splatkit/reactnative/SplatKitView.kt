@@ -11,6 +11,9 @@ import com.facebook.react.bridge.WritableMap
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
+import com.facebook.react.bridge.ReadableMap
+import com.splatkit.CameraPose
+import com.splatkit.RenderQuality
 import com.splatkit.SplatStats
 import com.splatkit.SplatSurfaceView
 import java.io.File
@@ -59,6 +62,12 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     private var currentWorldUri: String? = null
     private var currentColliderUri: String? = null
 
+    // The `cameraPose` prop is a declaration, not a one time command: it is
+    // applied when it changes and again when the world and the collider become
+    // ready, so an app can set it before the world exists.
+    private var declaredPose: CameraPose? = null
+    private var worldReady = false
+
     init {
         addView(
             surface,
@@ -66,6 +75,8 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         )
         surface.listener = object : SplatSurfaceView.Listener {
             override fun onWorldReady(splatCount: Int) {
+                worldReady = true
+                declaredPose?.let { surface.cameraPose = it }
                 emit("topWorldReady", Arguments.createMap().apply {
                     putInt("splatCount", splatCount)
                 })
@@ -77,7 +88,10 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
                 })
             }
 
-            override fun onColliderReady() = emit("topColliderReady", Arguments.createMap())
+            override fun onColliderReady() {
+                if (worldReady) declaredPose?.let { surface.cameraPose = it }
+                emit("topColliderReady", Arguments.createMap())
+            }
 
             override fun onColliderFailed(message: String) {
                 emit("topColliderFailed", Arguments.createMap().apply {
@@ -132,23 +146,35 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     fun setSource(uri: String?) {
         if (uri == currentWorldUri) return
         currentWorldUri = uri
-        load(uri, worldGeneration, "topWorldFailed") { surface.loadWorld(it) }
+        worldReady = false
+        load(uri, worldGeneration, "topWorldFailed", surface::loadWorld, surface::loadWorld)
     }
 
     fun setCollider(uri: String?) {
         if (uri == currentColliderUri) return
         currentColliderUri = uri
-        load(uri, colliderGeneration, "topColliderFailed") { surface.loadCollider(it) }
+        load(uri, colliderGeneration, "topColliderFailed", surface::loadCollider, surface::loadCollider)
     }
 
+    /**
+     * A file on disk goes to the engine as a path, which maps it instead of
+     * copying it through the Java heap. Everything else is read to bytes here.
+     * Either way the hand over is posted, so it lands after the props of the
+     * same transaction (quality applies to worlds loaded after it is set).
+     */
     private fun load(
         uri: String?,
         generations: AtomicLong,
         failureEvent: String,
-        hand: (ByteArray) -> Unit,
+        handFile: (File) -> Unit,
+        handBytes: (ByteArray) -> Unit,
     ) {
         if (uri.isNullOrEmpty()) return
         val generation = generations.incrementAndGet()
+        fileOf(uri)?.let { file ->
+            main.post { if (generation == generations.get()) handFile(file) }
+            return
+        }
         io.execute {
             val bytes = try {
                 readBytes(uri)
@@ -162,8 +188,14 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
                 return@execute
             }
             if (generation != generations.get()) return@execute
-            main.post { hand(bytes) }
+            main.post { handBytes(bytes) }
         }
+    }
+
+    private fun fileOf(uri: String): File? = when {
+        uri.startsWith("file://") -> Uri.parse(uri).path?.let(::File)
+        uri.startsWith("/") -> File(uri)
+        else -> null
     }
 
     /**
@@ -182,13 +214,39 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
                 ?.use { it.readBytes() }
                 ?: throw IllegalArgumentException("the content provider returned nothing")
 
-        uri.startsWith("file://") -> File(Uri.parse(uri).path!!).readBytes()
-
-        else -> File(uri).readBytes()
+        else -> throw IllegalArgumentException("unsupported source")
     }
 
-    fun setRenderScale(value: Float) { surface.renderScale = value }
-    fun setMaxShDegree(value: Int) { surface.maxShDegree = value }
+    /** A preset plus overrides, or the engine's default when the prop is absent. */
+    fun setQuality(map: ReadableMap?) {
+        val presetName = map?.takeIf { it.hasKey("preset") }?.getString("preset")
+        val preset = when (presetName) {
+            null -> RenderQuality.HIGH
+            else -> RenderQuality.named(presetName)
+                ?: throw IllegalArgumentException("unknown quality preset: $presetName")
+        }
+        val quality = if (map == null) preset else preset.copy(
+            renderScale = map.floatOr("renderScale", preset.renderScale),
+            maxShDegree = map.intOr("maxShDegree", preset.maxShDegree),
+            splatBudget = map.intOr("splatBudget", preset.splatBudget),
+            cullMarginDegrees = map.floatOr("cullMarginDegrees", preset.cullMarginDegrees),
+            linearBlending = if (map.hasKey("linearBlending")) map.getBoolean("linearBlending") else preset.linearBlending,
+        )
+        surface.applyQuality(quality)
+    }
+
+    private fun ReadableMap.floatOr(key: String, fallback: Float) =
+        if (hasKey(key)) getDouble(key).toFloat() else fallback
+
+    private fun ReadableMap.intOr(key: String, fallback: Int) =
+        if (hasKey(key)) getInt(key) else fallback
+
+    fun setDeclaredPose(pose: CameraPose?) {
+        declaredPose = pose
+        if (pose != null && worldReady) surface.cameraPose = pose
+    }
+
+    fun teleport(pose: CameraPose) { surface.cameraPose = pose }
     fun setLookSensitivity(value: Float) { surface.lookSensitivity = value }
     fun setWalkSensitivity(value: Float) { surface.walkSensitivity = value }
     fun setMotionEnabled(value: Boolean) = surface.setMotionEnabled(value)
@@ -218,6 +276,14 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
                     putDouble("gpuMs", stats.gpuMillis.toDouble())
                     putDouble("sortMs", stats.sortMillis.toDouble())
                     putInt("splatCount", stats.splatCount)
+                    val pose = surface.cameraPose
+                    putMap("pose", Arguments.createMap().apply {
+                        putDouble("x", pose.x.toDouble())
+                        putDouble("y", pose.y.toDouble())
+                        putDouble("z", pose.z.toDouble())
+                        putDouble("yaw", pose.yaw.toDouble())
+                        putDouble("pitch", pose.pitch.toDouble())
+                    })
                 })
                 main.postDelayed(this, statsIntervalMs.toLong())
             }
