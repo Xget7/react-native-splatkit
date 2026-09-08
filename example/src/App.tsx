@@ -115,9 +115,11 @@ export default function App() {
           setStatus(`world failed: ${e.nativeEvent.message}`)
         }
         onColliderReady={() => setStatus((s) => `${s}, walking`)}
-        onColliderFailed={(e) =>
-          setStatus((s) => `${s}, flying (${e.nativeEvent.message})`)
-        }
+        onColliderFailed={(e) => {
+          // Read the event before the updater runs: by then it has been recycled.
+          const message = e.nativeEvent.message;
+          setStatus((s) => `${s}, flying (${message})`);
+        }}
         onStats={(e) => {
           if (home.current == null) home.current = e.nativeEvent.pose;
           setStats(e.nativeEvent);
