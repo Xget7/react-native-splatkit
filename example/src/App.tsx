@@ -31,6 +31,15 @@ import {
 const FILES = 'file:///sdcard/Android/data/splatkit.example/files';
 const WORLD = { uri: `${FILES}/world.spz` };
 const COLLIDER = { uri: `${FILES}/collider.glb` };
+// Where the walk starts. A file's origin is wherever the capture began, which can be
+// inside a wall; the home button comes back here. Undefined starts at the origin.
+const HOME: CameraPose | undefined = {
+  x: -0.3,
+  y: 2.3,
+  z: 4.0,
+  yaw: 0,
+  pitch: -0.15,
+};
 
 const JOYSTICK_RADIUS = 60;
 const WALK_SPEED = 1.6;
@@ -51,9 +60,8 @@ export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const [preset, setPreset] = useState<QualityPreset>('medium');
-  // Where the world was captured; the engine puts the camera there on load and
-  // the button below brings it back.
-  const home = useRef<CameraPose | null>(null);
+  // The first pose seen, unless HOME says otherwise; the button below comes back to it.
+  const home = useRef<CameraPose | null>(HOME ?? null);
 
   const walk = (gesture: PanResponderGestureState) => {
     const clamp = (v: number) =>
@@ -90,6 +98,7 @@ export default function App() {
         source={WORLD}
         collider={COLLIDER}
         quality={preset}
+        cameraPose={HOME}
         motionEnabled={false}
         statsInterval={500}
         onEngineReady={(e) =>
