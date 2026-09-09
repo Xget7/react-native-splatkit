@@ -39,8 +39,8 @@ export type QualitySettings = {
   preset?: string;
   /** Fraction of the surface the splats are drawn at, 0.1 to 2. Above 1 supersamples. */
   renderScale?: CodegenTypes.Double;
-  /** Highest spherical harmonics degree kept from the file, 0 to 3. Applies to worlds loaded after it is set. */
-  maxShDegree?: CodegenTypes.Int32;
+  /** Spherical harmonics degree drawn, 0 to 3, capped by what the world carries. Takes effect on the next frame. */
+  shDegree?: CodegenTypes.Int32;
   /** Most splats drawn per frame through the level of detail tree; 0 draws them all. Applies to worlds loaded after it is set. */
   splatBudget?: CodegenTypes.Int32;
   /** Angular margin around the view kept drawn so a turn never meets an empty edge. */

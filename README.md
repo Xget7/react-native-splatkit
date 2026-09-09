@@ -10,10 +10,10 @@ npm install react-native-splatkit
 ## What this package is
 
 A binding, and nothing more.
-The renderer lives in [SplatKit](https://github.com/Xget7/splatkit), an Android engine published to Maven Central, and this package depends on it the way any Android app would:
+The renderer lives in [SplatKit](https://github.com/Xget7/android-splatkit), an Android engine published to Maven Central, and this package depends on it the way any Android app would:
 
 ```gradle
-api "io.github.xget7:splatkit-android:0.1.0-alpha03"
+api "io.github.xget7:splatkit-android:0.1.0-alpha04"
 ```
 
 There is no C++ here, no shaders, no copy of the engine.
@@ -55,7 +55,7 @@ A file on disk goes to the engine as a path and is mapped, not copied through th
 |---|---|
 | `source` | The world. SPZ versions 2 to 4; the format is detected from the bytes. |
 | `collider` | A GLB mesh. Switches the camera from flying to walking. |
-| `quality` | A preset name, `low`, `medium`, `high` (the default) or `ultra`, or a preset plus overrides: `{ preset: 'medium', renderScale: 0.8 }`. The overrides are `renderScale` (0.1 to 2, above 1 supersamples), `maxShDegree` (0 to 3), `splatBudget` (0 draws all), `cullMarginDegrees` and `linearBlending`. The reason behind each preset and its frame times are in the [engine's README](https://github.com/Xget7/splatkit/blob/main/packages/splatkit-android/README.md). |
+| `quality` | A preset name, `low`, `medium`, `high` (the default) or `ultra`, or a preset plus overrides: `{ preset: 'medium', renderScale: 0.8 }`. The overrides are `renderScale` (0.1 to 2, above 1 supersamples), `shDegree` (0 to 3, the harmonics degree drawn), `splatBudget` (0 draws all), `cullMarginDegrees` and `linearBlending`. The reason behind each preset and its frame times are in the [engine's README](https://github.com/Xget7/android-splatkit/blob/main/packages/splatkit-android/README.md). |
 | `cameraPose` | `{ x, y, z, yaw?, pitch? }`, meters and radians. Applied when it changes and again when the world and the collider become ready, so it can be set before the world loads. When walking the camera settles on the floor under the point. |
 | `motionEnabled` | The gyroscope drives the look direction. |
 | `lookSensitivity`, `walkSensitivity` | Gesture tuning. |

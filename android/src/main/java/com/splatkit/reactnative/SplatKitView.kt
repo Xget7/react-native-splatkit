@@ -227,7 +227,7 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         }
         val quality = if (map == null) preset else preset.copy(
             renderScale = map.floatOr("renderScale", preset.renderScale),
-            maxShDegree = map.intOr("maxShDegree", preset.maxShDegree),
+            shDegree = map.intOr("shDegree", preset.shDegree),
             splatBudget = map.intOr("splatBudget", preset.splatBudget),
             cullMarginDegrees = map.floatOr("cullMarginDegrees", preset.cullMarginDegrees),
             linearBlending = if (map.hasKey("linearBlending")) map.getBoolean("linearBlending") else preset.linearBlending,
