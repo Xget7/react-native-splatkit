@@ -1,7 +1,7 @@
 {
   "name": "react-native-splatkit",
   "version": "0.1.0",
-  "description": "React Native component for real-time Gaussian splatting: load an SPZ scene, pick a quality preset, and walk through it from JavaScript. Android renders with the SplatKit Vulkan engine today; the iOS engine is on the way.",
+  "description": "React Native component for real-time Gaussian splatting: load an SPZ scene, pick a quality preset, and walk through it from JavaScript.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {
