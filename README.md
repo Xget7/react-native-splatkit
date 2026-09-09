@@ -1,7 +1,8 @@
 # react-native-splatkit
 
-Walkable Gaussian splat worlds in React Native.
-Load a World Labs Marble `.spz`, put a `<SplatView />` in a tree, and walk through the scene.
+React Native component for real-time Gaussian splatting.
+Load an SPZ scene, put a `<SplatView />` in a tree, pick a quality preset, and walk through it from JavaScript.
+Android renders with the SplatKit Vulkan engine today; the iOS engine is on the way.
 
 ```sh
 npm install react-native-splatkit
