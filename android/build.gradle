@@ -67,4 +67,6 @@ dependencies {
   // no shaders and no native code of its own; it only puts the engine's view in
   // a React Native tree.
   api "io.github.xget7:splatkit-android:${getExtOrDefault('splatkitVersion')}"
+
+  testImplementation "junit:junit:4.13.2"
 }

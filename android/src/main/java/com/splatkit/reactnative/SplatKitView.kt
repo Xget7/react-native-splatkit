@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.FrameLayout
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.LifecycleEventListener
@@ -217,29 +218,17 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         else -> throw IllegalArgumentException("unsupported source")
     }
 
+    private var appliedQuality: RenderQuality? = null
+
     /** A preset plus overrides, or the engine's default when the prop is absent. */
     fun setQuality(map: ReadableMap?) {
-        val presetName = map?.takeIf { it.hasKey("preset") }?.getString("preset")
-        val preset = when (presetName) {
-            null -> RenderQuality.HIGH
-            else -> RenderQuality.named(presetName)
-                ?: throw IllegalArgumentException("unknown quality preset: $presetName")
-        }
-        val quality = if (map == null) preset else preset.copy(
-            renderScale = map.floatOr("renderScale", preset.renderScale),
-            shDegree = map.intOr("shDegree", preset.shDegree),
-            splatBudget = map.intOr("splatBudget", preset.splatBudget),
-            cullMarginDegrees = map.floatOr("cullMarginDegrees", preset.cullMarginDegrees),
-            linearBlending = if (map.hasKey("linearBlending")) map.getBoolean("linearBlending") else preset.linearBlending,
-        )
+        val quality = QualityMapper.fromMap(map) { Log.w(TAG, it) }
+        // A literal object in JSX is a new map on every render; the engine only
+        // hears about an actual change.
+        if (quality == appliedQuality) return
+        appliedQuality = quality
         surface.applyQuality(quality)
     }
-
-    private fun ReadableMap.floatOr(key: String, fallback: Float) =
-        if (hasKey(key)) getDouble(key).toFloat() else fallback
-
-    private fun ReadableMap.intOr(key: String, fallback: Int) =
-        if (hasKey(key)) getInt(key) else fallback
 
     fun setDeclaredPose(pose: CameraPose?) {
         declaredPose = pose
@@ -312,6 +301,10 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         syncRunning()
     }
     override fun onHostDestroy() { /* release() runs when the view is dropped */ }
+
+    private companion object {
+        const val TAG = "SplatKit"
+    }
 
     private fun emit(name: String, payload: WritableMap) {
         UIManagerHelper.getEventDispatcherForReactTag(reactContext, id)
