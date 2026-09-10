@@ -1,9 +1,9 @@
 package com.splatkit.reactnative
 
-import android.content.ContentResolver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.widget.FrameLayout
 import com.facebook.react.bridge.Arguments
@@ -18,7 +18,7 @@ import com.splatkit.RenderQuality
 import com.splatkit.SplatStats
 import com.splatkit.SplatSurfaceView
 import java.io.File
-import java.net.URL
+import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
@@ -42,6 +42,7 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     // File and network reads only. Decoding already runs on the engine's own
     // loader thread, so this stays free for the next source.
     private val io = Executors.newSingleThreadExecutor { Thread(it, "SplatKitRnIo") }
+    private val fetcher = SourceFetcher(reactContext)
 
     // A source that arrives while an older one is still being read must win, and
     // the older result must be dropped rather than replace it. The world and the
@@ -149,48 +150,67 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         if (uri == currentWorldUri) return
         currentWorldUri = uri
         worldReady = false
-        load(uri, worldGeneration, "topWorldFailed", surface::loadWorld, surface::loadWorld)
+        load(uri, "world", worldGeneration, "topWorldFailed", surface::loadWorld)
     }
 
     fun setCollider(uri: String?) {
         if (uri == currentColliderUri) return
         currentColliderUri = uri
-        load(uri, colliderGeneration, "topColliderFailed", surface::loadCollider, surface::loadCollider)
+        load(uri, "collider", colliderGeneration, "topColliderFailed", surface::loadCollider)
     }
 
     /**
      * A file on disk goes to the engine as a path, which maps it instead of
-     * copying it through the Java heap. Everything else is read to bytes here.
-     * Either way the hand over is posted, so it lands after the props of the
-     * same transaction (quality applies to worlds loaded after it is set).
+     * copying it through the Java heap. Everything else is streamed to a cache
+     * file first and then handed over the same way. Either way the hand over is
+     * posted, so it lands after the props of the same transaction (a budget
+     * applies to worlds loaded after it is set).
      */
     private fun load(
         uri: String?,
+        kind: String,
         generations: AtomicLong,
         failureEvent: String,
-        handFile: (File) -> Unit,
-        handBytes: (ByteArray) -> Unit,
+        hand: (File) -> Unit,
     ) {
         if (uri.isNullOrEmpty()) return
         val generation = generations.incrementAndGet()
+        val stale = { generation != generations.get() }
         fileOf(uri)?.let { file ->
-            main.post { if (generation == generations.get()) handFile(file) }
+            main.post { if (!stale()) hand(file) }
             return
         }
         io.execute {
-            val bytes = try {
-                readBytes(uri)
+            var lastProgressAt = 0L
+            val file = try {
+                fetcher.fetch(uri, stale) { bytes, total ->
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastProgressAt < 100 && bytes != total) return@fetch
+                    lastProgressAt = now
+                    main.post {
+                        if (stale()) return@post
+                        emit("topLoadProgress", Arguments.createMap().apply {
+                            putString("kind", kind)
+                            putDouble("bytes", bytes.toDouble())
+                            putDouble("total", total.toDouble())
+                        })
+                    }
+                }
+            } catch (e: CancellationException) {
+                return@execute
+            } catch (e: InterruptedException) {
+                return@execute
             } catch (e: Exception) {
-                if (generation != generations.get()) return@execute
+                if (stale()) return@execute
                 main.post {
                     emit(failureEvent, Arguments.createMap().apply {
-                        putString("message", "${e.javaClass.simpleName}: ${e.message} ($uri)")
+                        putString("message", "${e.javaClass.simpleName}: ${e.message}")
                     })
                 }
                 return@execute
             }
-            if (generation != generations.get()) return@execute
-            main.post { handBytes(bytes) }
+            if (stale()) return@execute
+            main.post { hand(file) }
         }
     }
 
@@ -198,25 +218,6 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         uri.startsWith("file://") -> Uri.parse(uri).path?.let(::File)
         uri.startsWith("/") -> File(uri)
         else -> null
-    }
-
-    /**
-     * Worlds are tens to hundreds of megabytes, so the bytes are read here and
-     * never serialised through the bridge.
-     */
-    private fun readBytes(uri: String): ByteArray = when {
-        uri.startsWith("asset://") ->
-            reactContext.assets.open(uri.removePrefix("asset://")).use { it.readBytes() }
-
-        uri.startsWith("http://") || uri.startsWith("https://") ->
-            URL(uri).openStream().use { it.readBytes() }
-
-        uri.startsWith("${ContentResolver.SCHEME_CONTENT}://") ->
-            reactContext.contentResolver.openInputStream(Uri.parse(uri))
-                ?.use { it.readBytes() }
-                ?: throw IllegalArgumentException("the content provider returned nothing")
-
-        else -> throw IllegalArgumentException("unsupported source")
     }
 
     private var appliedQuality: RenderQuality? = null
@@ -290,6 +291,7 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         statsTicking = false
         running = false
         main.removeCallbacksAndMessages(null)
+        fetcher.disconnect()
         io.shutdownNow()
         reactContext.removeLifecycleEventListener(this)
         surface.listener = null

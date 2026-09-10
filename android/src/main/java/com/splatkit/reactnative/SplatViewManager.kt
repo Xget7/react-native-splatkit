@@ -103,6 +103,7 @@ class SplatViewManager :
             "topWorldFailed" to mapOf("registrationName" to "onWorldFailed"),
             "topColliderReady" to mapOf("registrationName" to "onColliderReady"),
             "topColliderFailed" to mapOf("registrationName" to "onColliderFailed"),
+            "topLoadProgress" to mapOf("registrationName" to "onLoadProgress"),
             "topStats" to mapOf("registrationName" to "onStats"),
         )
 
