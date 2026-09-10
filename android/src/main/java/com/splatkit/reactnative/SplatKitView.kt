@@ -59,6 +59,7 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     private var statsIntervalMs = 0
     private var statsTicking = false
     private var announcedEngine = false
+    @Volatile private var released = false
 
     private var currentWorldUri: String? = null
     private var currentColliderUri: String? = null
@@ -231,6 +232,9 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     }
 
     fun setDeclaredPose(pose: CameraPose?) {
+        // A literal in JSX arrives as a new object on every render; only a
+        // different pose is a teleport.
+        if (pose == declaredPose) return
         declaredPose = pose
         if (pose != null && worldReady) surface.cameraPose = pose
     }
@@ -282,6 +286,7 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
 
     /** Called when React Native drops the view; the engine's resources go with it. */
     fun release() {
+        released = true
         statsTicking = false
         running = false
         main.removeCallbacksAndMessages(null)
@@ -307,6 +312,7 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     }
 
     private fun emit(name: String, payload: WritableMap) {
+        if (released) return
         UIManagerHelper.getEventDispatcherForReactTag(reactContext, id)
             ?.dispatchEvent(SplatEvent(UIManagerHelper.getSurfaceId(this), id, name, payload))
     }
