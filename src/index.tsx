@@ -6,4 +6,9 @@ export type {
   QualitySettings,
   QualityPreset,
   CameraPose,
+  EngineReadyEvent,
+  WorldReadyEvent,
+  FailureEvent,
+  LoadProgressEvent,
+  StatsEvent,
 } from './SplatView';

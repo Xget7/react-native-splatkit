@@ -161,4 +161,29 @@ class SourceFetcherTest {
         assertTrue(live.exists())
         assertFalse(old.exists())
     }
+
+    @Test
+    fun `finished files over the cap go oldest first and part files are left alone`() {
+        val dir = File(folder.root, "splatkit").apply { mkdirs() }
+        val now = System.currentTimeMillis()
+        val oldest = File(dir, "a.spz").apply { writeBytes(ByteArray(300)); setLastModified(now - 3000) }
+        val middle = File(dir, "b.spz").apply { writeBytes(ByteArray(300)); setLastModified(now - 2000) }
+        val newest = File(dir, "c.spz").apply { writeBytes(ByteArray(300)); setLastModified(now - 1000) }
+        val part = File(dir, "d.spz1.part").apply { writeBytes(ByteArray(300)) }
+        SourceFetcher(folder.root, cacheCapBytes = 700) { null }
+        assertFalse(oldest.exists())
+        assertTrue(middle.exists())
+        assertTrue(newest.exists())
+        assertTrue(part.exists())
+    }
+
+    @Test
+    fun `a cache hit counts as use so the file is evicted last`() {
+        val cached = fetcher().fetch(url("/world.spz"), { false }) { _, _ -> }
+        val lastWeek = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
+        cached.setLastModified(lastWeek)
+        fetcher().fetch(url("/world.spz"), { false }) { _, _ -> }
+        assertTrue(cached.lastModified() > lastWeek)
+        assertEquals(1, requests.get())
+    }
 }

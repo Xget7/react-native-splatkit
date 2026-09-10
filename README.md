@@ -26,8 +26,8 @@ import { SplatView } from 'react-native-splatkit';
 
 <SplatView
   style={StyleSheet.absoluteFill}
-  source={{ uri: 'file:///sdcard/Download/world.spz' }}
-  collider={{ uri: 'file:///sdcard/Download/collider.glb' }}
+  source={{ uri: 'file:///sdcard/Android/data/com.example.app/files/world.spz' }}
+  collider={{ uri: 'file:///sdcard/Android/data/com.example.app/files/collider.glb' }}
   quality="medium"
   onEngineReady={(e) => console.log(e.nativeEvent.gpu)}
   onWorldReady={(e) => console.log(e.nativeEvent.splatCount, 'splats')}
@@ -114,6 +114,7 @@ Raise the floor with `expo-build-properties`:
 React Native resends a prop only when it changes, so after `onWorldFailed` a retry needs a new `uri` (a query string will do) or a new `key` on the view.
 The engine has no unload call yet; setting `source` to `undefined` leaves the current world in place.
 Sources that are not local files are copied once to the app's cache directory, keyed by URI, and mapped from there; a changed file behind the same URI is not noticed, so change the URI or clear the app cache.
+The cache is capped at 512 MB and evicts the least recently used world first, so a handful of worlds stay and a season's worth does not.
 
 ### Children
 
@@ -156,6 +157,10 @@ Reading `/sdcard/Download` instead means asking for `READ_EXTERNAL_STORAGE`, whi
 
 Everything from the engine logs under the tag `SplatKit`.
 MIUI hides application logs until `adb shell setprop persist.log.tag.SplatKit V`.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development loop, the checks that run on a pull request and the conventions.
 
 ## License
 

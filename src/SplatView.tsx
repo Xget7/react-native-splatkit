@@ -11,7 +11,15 @@ import {
 } from './quality';
 import type { CameraPose } from './SplatViewNativeComponent';
 
-export type { SplatSource, CameraPose } from './SplatViewNativeComponent';
+export type {
+  SplatSource,
+  CameraPose,
+  EngineReadyEvent,
+  WorldReadyEvent,
+  FailureEvent,
+  LoadProgressEvent,
+  StatsEvent,
+} from './SplatViewNativeComponent';
 export type { QualityPreset, QualitySettings } from './quality';
 
 export type SplatViewProps = Omit<NativeProps, keyof ViewProps | 'quality'> &

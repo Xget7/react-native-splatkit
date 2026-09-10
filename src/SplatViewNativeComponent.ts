@@ -21,7 +21,7 @@ export type SplatSource = {
   uri: string;
 };
 
-type EngineReadyEvent = {
+export type EngineReadyEvent = {
   /** False when the device could not start the renderer; the view stays blank. */
   available: boolean;
   /** GPU name and graphics API version as the driver reports them, empty when unavailable. */
@@ -51,15 +51,15 @@ export type CameraPose = {
   pitch?: CodegenTypes.Double;
 };
 
-type WorldReadyEvent = {
+export type WorldReadyEvent = {
   splatCount: CodegenTypes.Int32;
 };
 
-type FailureEvent = {
+export type FailureEvent = {
   message: string;
 };
 
-type LoadProgressEvent = {
+export type LoadProgressEvent = {
   /** `world` or `collider`. */
   kind: string;
   bytes: CodegenTypes.Double;
@@ -67,7 +67,7 @@ type LoadProgressEvent = {
   total: CodegenTypes.Double;
 };
 
-type StatsEvent = {
+export type StatsEvent = {
   fps: CodegenTypes.Double;
   frameMs: CodegenTypes.Double;
   gpuMs: CodegenTypes.Double;

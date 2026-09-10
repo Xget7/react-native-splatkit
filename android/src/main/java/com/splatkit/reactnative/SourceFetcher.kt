@@ -34,9 +34,10 @@ internal typealias Opened = Pair<InputStream, Long>
  */
 internal class SourceFetcher(
     cacheRoot: File,
+    private val cacheCapBytes: Long = CACHE_CAP_BYTES,
     private val platform: (String) -> Opened?,
 ) {
-    constructor(context: Context) : this(context.cacheDir, AndroidSources(context))
+    constructor(context: Context) : this(context.cacheDir, platform = AndroidSources(context))
 
     private val dir = File(cacheRoot, "splatkit")
 
@@ -49,6 +50,20 @@ internal class SourceFetcher(
         // only what nobody could still be writing is swept.
         val stale = System.currentTimeMillis() - STALE_PART_MS
         dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
+        trim(cacheCapBytes)
+    }
+
+    /**
+     * Keeps the finished files under the cap, oldest use first. A hit touches its
+     * file, so a world in use stays while one from last month goes.
+     */
+    private fun trim(cap: Long) {
+        val finished = dir.listFiles { f -> f.isFile && !f.name.endsWith(".part") } ?: return
+        var kept = 0L
+        finished.sortedByDescending { it.lastModified() }.forEach { f ->
+            kept += f.length()
+            if (kept > cap && !f.delete()) Log.w(TAG, "could not evict ${f.name}")
+        }
     }
 
     /** Called from any thread; makes a blocked network read fail promptly. */
@@ -61,6 +76,7 @@ internal class SourceFetcher(
     fun fetch(uri: String, cancelled: () -> Boolean, progress: (Long, Long) -> Unit): File {
         val target = File(dir, "${sha1(uri)}${extensionOf(uri)}")
         if (target.isFile && target.length() > 0) {
+            target.setLastModified(System.currentTimeMillis())
             progress(target.length(), target.length())
             return target
         }
@@ -135,6 +151,8 @@ internal class SourceFetcher(
     companion object {
         private const val TAG = "SplatKit"
         private const val STALE_PART_MS = 60 * 60 * 1000L
+        /** Worlds run to a hundred MB or more; a handful is worth keeping, a season's worth is not. */
+        private const val CACHE_CAP_BYTES = 512L * 1024 * 1024
 
         /** The extension of the last path segment, before any query or fragment; empty when there is none. */
         fun extensionOf(uri: String): String {

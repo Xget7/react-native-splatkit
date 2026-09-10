@@ -87,8 +87,8 @@ class SplatViewManager :
         view.startBenchmark(seconds.toFloat())
     }
 
-    // Codegen wires these on the new architecture; declaring them keeps the view
-    // working through the interop layer too.
+    // Codegen names the events on the JavaScript side; the view manager registry
+    // still asks for them here, and an unnamed direct event is silently dropped.
     override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> =
         mutableMapOf(
             "topEngineReady" to mapOf("registrationName" to "onEngineReady"),

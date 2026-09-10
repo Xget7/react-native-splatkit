@@ -58,7 +58,30 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     private var running = false
 
     private var statsIntervalMs = 0
-    private var statsTicking = false
+    // The one runnable that may be queued; setting the interval or pausing removes it,
+    // so two cannot loop at once.
+    private val statsTick = object : Runnable {
+        override fun run() {
+            if (statsIntervalMs <= 0 || !running) return
+            surface.readStats(stats)
+            emit("topStats", Arguments.createMap().apply {
+                putDouble("fps", stats.fps.toDouble())
+                putDouble("frameMs", stats.frameMillis.toDouble())
+                putDouble("gpuMs", stats.gpuMillis.toDouble())
+                putDouble("sortMs", stats.sortMillis.toDouble())
+                putInt("splatCount", stats.splatCount)
+                val pose = surface.cameraPose
+                putMap("pose", Arguments.createMap().apply {
+                    putDouble("x", pose.x.toDouble())
+                    putDouble("y", pose.y.toDouble())
+                    putDouble("z", pose.z.toDouble())
+                    putDouble("yaw", pose.yaw.toDouble())
+                    putDouble("pitch", pose.pitch.toDouble())
+                })
+            })
+            main.postDelayed(this, statsIntervalMs.toLong())
+        }
+    }
     private var announcedEngine = false
     @Volatile private var released = false
 
@@ -131,6 +154,8 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         if (shouldRun == running) return
         running = shouldRun
         if (shouldRun) surface.resume() else surface.pause()
+        // A paused engine has no new stats; the ticker rests with it.
+        syncStatsTicker()
     }
 
     // React Native does not lay out children of a view it does not manage, and a
@@ -251,38 +276,14 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
 
     fun setStatsInterval(millis: Int) {
         statsIntervalMs = millis
-        if (millis > 0) startStatsTicker() else statsTicking = false
+        syncStatsTicker()
     }
 
-    private fun startStatsTicker() {
-        if (statsTicking) return
-        statsTicking = true
-        val tick = object : Runnable {
-            override fun run() {
-                if (!statsTicking || statsIntervalMs <= 0) {
-                    statsTicking = false
-                    return
-                }
-                surface.readStats(stats)
-                emit("topStats", Arguments.createMap().apply {
-                    putDouble("fps", stats.fps.toDouble())
-                    putDouble("frameMs", stats.frameMillis.toDouble())
-                    putDouble("gpuMs", stats.gpuMillis.toDouble())
-                    putDouble("sortMs", stats.sortMillis.toDouble())
-                    putInt("splatCount", stats.splatCount)
-                    val pose = surface.cameraPose
-                    putMap("pose", Arguments.createMap().apply {
-                        putDouble("x", pose.x.toDouble())
-                        putDouble("y", pose.y.toDouble())
-                        putDouble("z", pose.z.toDouble())
-                        putDouble("yaw", pose.yaw.toDouble())
-                        putDouble("pitch", pose.pitch.toDouble())
-                    })
-                })
-                main.postDelayed(this, statsIntervalMs.toLong())
-            }
+    private fun syncStatsTicker() {
+        main.removeCallbacks(statsTick)
+        if (statsIntervalMs > 0 && running && !released) {
+            main.postDelayed(statsTick, statsIntervalMs.toLong())
         }
-        main.postDelayed(tick, statsIntervalMs.toLong())
     }
 
     /** Called when React Native drops the view; the engine's resources go with it. */
@@ -290,7 +291,6 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         released = true
         worldGeneration.incrementAndGet()
         colliderGeneration.incrementAndGet()
-        statsTicking = false
         running = false
         main.removeCallbacksAndMessages(null)
         fetcher.disconnect()
