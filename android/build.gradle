@@ -1,9 +1,6 @@
 buildscript {
   ext.Splatkit = [
     kotlinVersion: "2.1.21",
-    // The engine needs Android 10 and Vulkan 1.1; there is no fallback renderer
-    // below that, so the floor is the engine's floor and not React Native's.
-    minSdkVersion: 29,
     compileSdkVersion: 36,
     // The one coupling between this package and the engine. Nothing else about
     // the renderer is visible from here.
@@ -42,7 +39,11 @@ android {
   compileSdkVersion getExtOrDefault("compileSdkVersion")
 
   defaultConfig {
-    minSdkVersion getExtOrDefault("minSdkVersion")
+    // The engine needs Android 10 and Vulkan 1.1; there is no fallback renderer
+    // below that. This is pinned rather than read from the app so that an app
+    // on a lower floor fails here, with this package's name in the message,
+    // instead of deep inside the engine's manifest merge.
+    minSdkVersion 29
   }
 
   compileOptions {
@@ -52,6 +53,11 @@ android {
 
   kotlinOptions {
     jvmTarget = "17"
+  }
+
+  testOptions {
+    // android.util.Log in the fetcher; the unit tests run on a plain JVM.
+    unitTests.returnDefaultValues = true
   }
 }
 
@@ -66,4 +72,6 @@ dependencies {
   // no shaders and no native code of its own; it only puts the engine's view in
   // a React Native tree.
   api "io.github.xget7:splatkit-android:${getExtOrDefault('splatkitVersion')}"
+
+  testImplementation "junit:junit:4.13.2"
 }

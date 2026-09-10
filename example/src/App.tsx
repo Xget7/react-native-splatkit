@@ -114,6 +114,15 @@ export default function App() {
         onWorldFailed={(e) =>
           setStatus(`world failed: ${e.nativeEvent.message}`)
         }
+        onLoadProgress={(e) => {
+          const { kind, bytes, total } = e.nativeEvent;
+          const mb = (bytes / 1048576).toFixed(0);
+          setStatus(
+            total > 0
+              ? `${kind}: ${mb} of ${(total / 1048576).toFixed(0)} MB`
+              : `${kind}: ${mb} MB`
+          );
+        }}
         onColliderReady={() => setStatus((s) => `${s}, walking`)}
         onColliderFailed={(e) => {
           // Read the event before the updater runs: by then it has been recycled.

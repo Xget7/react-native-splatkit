@@ -1,9 +1,10 @@
 package com.splatkit.reactnative
 
-import android.content.ContentResolver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import android.widget.FrameLayout
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.LifecycleEventListener
@@ -17,7 +18,7 @@ import com.splatkit.RenderQuality
 import com.splatkit.SplatStats
 import com.splatkit.SplatSurfaceView
 import java.io.File
-import java.net.URL
+import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
@@ -41,6 +42,7 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     // File and network reads only. Decoding already runs on the engine's own
     // loader thread, so this stays free for the next source.
     private val io = Executors.newSingleThreadExecutor { Thread(it, "SplatKitRnIo") }
+    private val fetcher = SourceFetcher(reactContext)
 
     // A source that arrives while an older one is still being read must win, and
     // the older result must be dropped rather than replace it. The world and the
@@ -56,8 +58,32 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     private var running = false
 
     private var statsIntervalMs = 0
-    private var statsTicking = false
+    // The one runnable that may be queued; setting the interval or pausing removes it,
+    // so two cannot loop at once.
+    private val statsTick = object : Runnable {
+        override fun run() {
+            if (statsIntervalMs <= 0 || !running) return
+            surface.readStats(stats)
+            emit("topStats", Arguments.createMap().apply {
+                putDouble("fps", stats.fps.toDouble())
+                putDouble("frameMs", stats.frameMillis.toDouble())
+                putDouble("gpuMs", stats.gpuMillis.toDouble())
+                putDouble("sortMs", stats.sortMillis.toDouble())
+                putInt("splatCount", stats.splatCount)
+                val pose = surface.cameraPose
+                putMap("pose", Arguments.createMap().apply {
+                    putDouble("x", pose.x.toDouble())
+                    putDouble("y", pose.y.toDouble())
+                    putDouble("z", pose.z.toDouble())
+                    putDouble("yaw", pose.yaw.toDouble())
+                    putDouble("pitch", pose.pitch.toDouble())
+                })
+            })
+            main.postDelayed(this, statsIntervalMs.toLong())
+        }
+    }
     private var announcedEngine = false
+    @Volatile private var released = false
 
     private var currentWorldUri: String? = null
     private var currentColliderUri: String? = null
@@ -128,6 +154,8 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         if (shouldRun == running) return
         running = shouldRun
         if (shouldRun) surface.resume() else surface.pause()
+        // A paused engine has no new stats; the ticker rests with it.
+        syncStatsTicker()
     }
 
     // React Native does not lay out children of a view it does not manage, and a
@@ -147,48 +175,67 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         if (uri == currentWorldUri) return
         currentWorldUri = uri
         worldReady = false
-        load(uri, worldGeneration, "topWorldFailed", surface::loadWorld, surface::loadWorld)
+        load(uri, "world", worldGeneration, "topWorldFailed", surface::loadWorld)
     }
 
     fun setCollider(uri: String?) {
         if (uri == currentColliderUri) return
         currentColliderUri = uri
-        load(uri, colliderGeneration, "topColliderFailed", surface::loadCollider, surface::loadCollider)
+        load(uri, "collider", colliderGeneration, "topColliderFailed", surface::loadCollider)
     }
 
     /**
      * A file on disk goes to the engine as a path, which maps it instead of
-     * copying it through the Java heap. Everything else is read to bytes here.
-     * Either way the hand over is posted, so it lands after the props of the
-     * same transaction (quality applies to worlds loaded after it is set).
+     * copying it through the Java heap. Everything else is streamed to a cache
+     * file first and then handed over the same way. Either way the hand over is
+     * posted, so it lands after the props of the same transaction (a budget
+     * applies to worlds loaded after it is set).
      */
     private fun load(
         uri: String?,
+        kind: String,
         generations: AtomicLong,
         failureEvent: String,
-        handFile: (File) -> Unit,
-        handBytes: (ByteArray) -> Unit,
+        hand: (File) -> Unit,
     ) {
-        if (uri.isNullOrEmpty()) return
+        // Bumped before the empty check so that clearing the prop also withdraws
+        // a load still in flight.
         val generation = generations.incrementAndGet()
+        if (uri.isNullOrEmpty()) return
+        val stale = { generation != generations.get() }
         fileOf(uri)?.let { file ->
-            main.post { if (generation == generations.get()) handFile(file) }
+            main.post { if (!stale() && !released) hand(file) }
             return
         }
         io.execute {
-            val bytes = try {
-                readBytes(uri)
+            var lastProgressAt = 0L
+            val file = try {
+                fetcher.fetch(uri, stale) { bytes, total ->
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastProgressAt < 100 && bytes != total) return@fetch
+                    lastProgressAt = now
+                    main.post {
+                        if (stale()) return@post
+                        emit("topLoadProgress", Arguments.createMap().apply {
+                            putString("kind", kind)
+                            putDouble("bytes", bytes.toDouble())
+                            putDouble("total", total.toDouble())
+                        })
+                    }
+                }
+            } catch (e: CancellationException) {
+                return@execute
             } catch (e: Exception) {
-                if (generation != generations.get()) return@execute
+                if (stale() || released) return@execute
+                Log.w(TAG, "$kind failed: $uri", e)
                 main.post {
                     emit(failureEvent, Arguments.createMap().apply {
-                        putString("message", "${e.javaClass.simpleName}: ${e.message} ($uri)")
+                        putString("message", "${e.javaClass.simpleName}: ${e.message ?: "no detail"} ($uri)")
                     })
                 }
                 return@execute
             }
-            if (generation != generations.get()) return@execute
-            main.post { handBytes(bytes) }
+            main.post { if (!stale() && !released) hand(file) }
         }
     }
 
@@ -198,50 +245,22 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         else -> null
     }
 
-    /**
-     * Worlds are tens to hundreds of megabytes, so the bytes are read here and
-     * never serialised through the bridge.
-     */
-    private fun readBytes(uri: String): ByteArray = when {
-        uri.startsWith("asset://") ->
-            reactContext.assets.open(uri.removePrefix("asset://")).use { it.readBytes() }
-
-        uri.startsWith("http://") || uri.startsWith("https://") ->
-            URL(uri).openStream().use { it.readBytes() }
-
-        uri.startsWith("${ContentResolver.SCHEME_CONTENT}://") ->
-            reactContext.contentResolver.openInputStream(Uri.parse(uri))
-                ?.use { it.readBytes() }
-                ?: throw IllegalArgumentException("the content provider returned nothing")
-
-        else -> throw IllegalArgumentException("unsupported source")
-    }
+    private var appliedQuality: RenderQuality? = null
 
     /** A preset plus overrides, or the engine's default when the prop is absent. */
     fun setQuality(map: ReadableMap?) {
-        val presetName = map?.takeIf { it.hasKey("preset") }?.getString("preset")
-        val preset = when (presetName) {
-            null -> RenderQuality.HIGH
-            else -> RenderQuality.named(presetName)
-                ?: throw IllegalArgumentException("unknown quality preset: $presetName")
-        }
-        val quality = if (map == null) preset else preset.copy(
-            renderScale = map.floatOr("renderScale", preset.renderScale),
-            shDegree = map.intOr("shDegree", preset.shDegree),
-            splatBudget = map.intOr("splatBudget", preset.splatBudget),
-            cullMarginDegrees = map.floatOr("cullMarginDegrees", preset.cullMarginDegrees),
-            linearBlending = if (map.hasKey("linearBlending")) map.getBoolean("linearBlending") else preset.linearBlending,
-        )
+        val quality = QualityMapper.fromMap(map) { Log.w(TAG, it) }
+        // A literal object in JSX is a new map on every render; the engine only
+        // hears about an actual change.
+        if (quality == appliedQuality) return
+        appliedQuality = quality
         surface.applyQuality(quality)
     }
 
-    private fun ReadableMap.floatOr(key: String, fallback: Float) =
-        if (hasKey(key)) getDouble(key).toFloat() else fallback
-
-    private fun ReadableMap.intOr(key: String, fallback: Int) =
-        if (hasKey(key)) getInt(key) else fallback
-
     fun setDeclaredPose(pose: CameraPose?) {
+        // A literal in JSX arrives as a new object on every render; only a
+        // different pose is a teleport.
+        if (pose == declaredPose) return
         declaredPose = pose
         if (pose != null && worldReady) surface.cameraPose = pose
     }
@@ -257,45 +276,24 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
 
     fun setStatsInterval(millis: Int) {
         statsIntervalMs = millis
-        if (millis > 0) startStatsTicker() else statsTicking = false
+        syncStatsTicker()
     }
 
-    private fun startStatsTicker() {
-        if (statsTicking) return
-        statsTicking = true
-        val tick = object : Runnable {
-            override fun run() {
-                if (!statsTicking || statsIntervalMs <= 0) {
-                    statsTicking = false
-                    return
-                }
-                surface.readStats(stats)
-                emit("topStats", Arguments.createMap().apply {
-                    putDouble("fps", stats.fps.toDouble())
-                    putDouble("frameMs", stats.frameMillis.toDouble())
-                    putDouble("gpuMs", stats.gpuMillis.toDouble())
-                    putDouble("sortMs", stats.sortMillis.toDouble())
-                    putInt("splatCount", stats.splatCount)
-                    val pose = surface.cameraPose
-                    putMap("pose", Arguments.createMap().apply {
-                        putDouble("x", pose.x.toDouble())
-                        putDouble("y", pose.y.toDouble())
-                        putDouble("z", pose.z.toDouble())
-                        putDouble("yaw", pose.yaw.toDouble())
-                        putDouble("pitch", pose.pitch.toDouble())
-                    })
-                })
-                main.postDelayed(this, statsIntervalMs.toLong())
-            }
+    private fun syncStatsTicker() {
+        main.removeCallbacks(statsTick)
+        if (statsIntervalMs > 0 && running && !released) {
+            main.postDelayed(statsTick, statsIntervalMs.toLong())
         }
-        main.postDelayed(tick, statsIntervalMs.toLong())
     }
 
     /** Called when React Native drops the view; the engine's resources go with it. */
     fun release() {
-        statsTicking = false
+        released = true
+        worldGeneration.incrementAndGet()
+        colliderGeneration.incrementAndGet()
         running = false
         main.removeCallbacksAndMessages(null)
+        fetcher.disconnect()
         io.shutdownNow()
         reactContext.removeLifecycleEventListener(this)
         surface.listener = null
@@ -313,9 +311,18 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     }
     override fun onHostDestroy() { /* release() runs when the view is dropped */ }
 
+    private companion object {
+        const val TAG = "SplatKit"
+    }
+
     private fun emit(name: String, payload: WritableMap) {
-        UIManagerHelper.getEventDispatcherForReactTag(reactContext, id)
-            ?.dispatchEvent(SplatEvent(UIManagerHelper.getSurfaceId(this), id, name, payload))
+        if (released) return
+        val dispatcher = UIManagerHelper.getEventDispatcherForReactTag(reactContext, id)
+        if (dispatcher == null) {
+            Log.w(TAG, "dropped $name: no event dispatcher for view $id")
+            return
+        }
+        dispatcher.dispatchEvent(SplatEvent(UIManagerHelper.getSurfaceId(this), id, name, payload))
     }
 }
 

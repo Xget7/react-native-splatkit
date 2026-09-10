@@ -1,6 +1,5 @@
 package com.splatkit.reactnative
 
-import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.uimanager.SimpleViewManager
@@ -88,14 +87,8 @@ class SplatViewManager :
         view.startBenchmark(seconds.toFloat())
     }
 
-    // The delegate routes commands on the new architecture; this keeps the view
-    // usable through the interop layer as well.
-    override fun receiveCommand(view: SplatKitView, command: String, args: ReadableArray?) {
-        delegate.receiveCommand(view, command, args)
-    }
-
-    // Codegen wires these on the new architecture; declaring them keeps the view
-    // working through the interop layer too.
+    // Codegen names the events on the JavaScript side; the view manager registry
+    // still asks for them here, and an unnamed direct event is silently dropped.
     override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> =
         mutableMapOf(
             "topEngineReady" to mapOf("registrationName" to "onEngineReady"),
@@ -103,18 +96,23 @@ class SplatViewManager :
             "topWorldFailed" to mapOf("registrationName" to "onWorldFailed"),
             "topColliderReady" to mapOf("registrationName" to "onColliderReady"),
             "topColliderFailed" to mapOf("registrationName" to "onColliderFailed"),
+            "topLoadProgress" to mapOf("registrationName" to "onLoadProgress"),
             "topStats" to mapOf("registrationName" to "onStats"),
         )
 
     companion object {
         const val NAME = "SplatView"
 
+        /** A missing or null coordinate is 0 rather than a crash; the prop is typed, so this only guards the interop path. */
+        private fun ReadableMap.floatOrZero(key: String): Float =
+            if (hasKey(key) && !isNull(key)) getDouble(key).toFloat() else 0f
+
         private fun poseOf(map: ReadableMap) = CameraPose(
-            x = map.getDouble("x").toFloat(),
-            y = map.getDouble("y").toFloat(),
-            z = map.getDouble("z").toFloat(),
-            yaw = if (map.hasKey("yaw")) map.getDouble("yaw").toFloat() else 0f,
-            pitch = if (map.hasKey("pitch")) map.getDouble("pitch").toFloat() else 0f,
+            x = map.floatOrZero("x"),
+            y = map.floatOrZero("y"),
+            z = map.floatOrZero("z"),
+            yaw = map.floatOrZero("yaw"),
+            pitch = map.floatOrZero("pitch"),
         )
     }
 }

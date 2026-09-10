@@ -1,6 +1,6 @@
 {
   "name": "react-native-splatkit",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "React Native component for real-time Gaussian splatting: load an SPZ scene, pick a quality preset, and walk through it from JavaScript.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -17,15 +17,14 @@
     "lib",
     "android",
     "ios",
-    "cpp",
     "*.podspec",
-    "react-native.config.js",
     "!ios/build",
     "!android/build",
     "!android/gradle",
     "!android/gradlew",
     "!android/gradlew.bat",
     "!android/local.properties",
+    "!android/src/test",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -36,7 +35,8 @@
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
     "prepare": "bob build",
     "typecheck": "tsc",
-    "lint": "eslint \"**/*.{js,ts,tsx}\""
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "test": "jest"
   },
   "keywords": [
     "react-native",
@@ -56,12 +56,17 @@
   },
   "author": "Juan Tupa <juanieltupa@gmail.com> (https://github.com/Xget7)",
   "license": "MIT",
+  "sideEffects": false,
+  "engines": {
+    "node": ">= 22.11.0"
+  },
   "bugs": {
     "url": "https://github.com/Xget7/react-native-splatkit/issues"
   },
   "homepage": "https://github.com/Xget7/react-native-splatkit#readme",
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",
@@ -69,12 +74,15 @@
     "@eslint/js": "^10.0.1",
     "@react-native/babel-preset": "0.85.0",
     "@react-native/eslint-config": "0.85.0",
+    "@types/jest": "^29.5.14",
     "@types/react": "^19.2.0",
+    "babel-jest": "^29.7.0",
     "del-cli": "^7.0.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-ft-flow": "^3.0.11",
     "eslint-plugin-prettier": "^5.5.6",
+    "jest": "^29.7.0",
     "prettier": "^3.8.3",
     "react": "19.2.3",
     "react-native": "0.85.0",
@@ -83,8 +91,8 @@
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": ">=19.0.0",
+    "react-native": ">=0.85.0"
   },
   "workspaces": [
     "example"
@@ -110,7 +118,7 @@
   },
   "codegenConfig": {
     "name": "SplatViewSpec",
-    "type": "all",
+    "type": "components",
     "jsSrcsDir": "src",
     "android": {
       "javaPackageName": "com.splatkit.reactnative"

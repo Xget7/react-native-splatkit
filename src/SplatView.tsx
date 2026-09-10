@@ -4,22 +4,31 @@ import NativeSplatView, {
   Commands,
   type NativeProps,
 } from './SplatViewNativeComponent';
+import {
+  normalizeQuality,
+  type QualityPreset,
+  type QualitySettings,
+} from './quality';
+import type { CameraPose } from './SplatViewNativeComponent';
 
 export type {
   SplatSource,
-  QualitySettings,
   CameraPose,
+  EngineReadyEvent,
+  WorldReadyEvent,
+  FailureEvent,
+  LoadProgressEvent,
+  StatsEvent,
 } from './SplatViewNativeComponent';
-import type { QualitySettings, CameraPose } from './SplatViewNativeComponent';
-
-export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra';
+export type { QualityPreset, QualitySettings } from './quality';
 
 export type SplatViewProps = Omit<NativeProps, keyof ViewProps | 'quality'> &
   ViewProps & {
     /**
      * A preset name, or a preset plus overrides:
      * `quality="medium"` or `quality={{ preset: 'medium', renderScale: 0.8 }}`.
-     * `high` when omitted.
+     * `high` when omitted. Out of range values are clamped with a warning in
+     * development; an unknown preset falls back to `high`.
      */
     quality?: QualityPreset | QualitySettings;
   };
@@ -46,29 +55,41 @@ export type SplatViewHandle = {
  *
  * The view has to have a size; a `SurfaceView` with no height renders nothing
  * and reports no error, so give it `flex: 1` or explicit dimensions.
+ * Children are not laid out; put a HUD in a sibling view.
  */
 const SplatViewComponent = forwardRef<SplatViewHandle, SplatViewProps>(
   ({ quality, ...props }, ref) => {
-    const nativeRef = useRef<React.ElementRef<typeof NativeSplatView>>(null);
+    const nativeRef = useRef<React.ComponentRef<typeof NativeSplatView>>(null);
 
-    useImperativeHandle(ref, () => ({
-      setWalkVelocity(forward: number, right: number) {
-        if (nativeRef.current == null) return;
-        Commands.setWalkVelocity(nativeRef.current, forward, right);
-      },
-      setCameraPose({ x, y, z, yaw = 0, pitch = 0 }: CameraPose) {
-        if (nativeRef.current == null) return;
-        Commands.setCameraPose(nativeRef.current, x, y, z, yaw, pitch);
-      },
-      startBenchmark(seconds = 10) {
-        if (nativeRef.current == null) return;
-        Commands.startBenchmark(nativeRef.current, seconds);
-      },
-    }));
+    useImperativeHandle(
+      ref,
+      () => ({
+        setWalkVelocity(forward: number, right: number) {
+          if (nativeRef.current == null) return;
+          Commands.setWalkVelocity(nativeRef.current, forward, right);
+        },
+        setCameraPose({ x, y, z, yaw = 0, pitch = 0 }: CameraPose) {
+          if (nativeRef.current == null) return;
+          Commands.setCameraPose(nativeRef.current, x, y, z, yaw, pitch);
+        },
+        startBenchmark(seconds = 10) {
+          if (nativeRef.current == null) return;
+          Commands.startBenchmark(nativeRef.current, seconds);
+        },
+      }),
+      []
+    );
 
-    const settings =
-      typeof quality === 'string' ? { preset: quality } : quality;
-    return <NativeSplatView ref={nativeRef} quality={settings} {...props} />;
+    // Normalised on every render: it is a handful of comparisons, Fabric diffs
+    // the struct by value, and the Android side skips a value it already
+    // applied, so a memo here would only add a dependency list to keep in sync.
+    return (
+      <NativeSplatView
+        ref={nativeRef}
+        quality={normalizeQuality(quality)}
+        {...props}
+      />
+    );
   }
 );
 
