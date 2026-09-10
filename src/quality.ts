@@ -7,8 +7,6 @@
  * absence cannot mean "keep the preset's". A negative number can.
  */
 
-declare const __DEV__: boolean;
-
 export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra';
 
 export type QualitySettings = {
@@ -40,11 +38,19 @@ export type NativeQuality = {
 export const UNSET = -1;
 
 const PRESETS: readonly QualityPreset[] = ['low', 'medium', 'high', 'ultra'];
+/** The native field is 32 bit; anything larger would saturate silently on the way over. */
+const INT32_MAX = 2147483647;
 
 type Warn = (message: string) => void;
 
+// One line per distinct problem for the life of the app, in development and
+// in release alike: a clamped value changes what is drawn, and a store build
+// with no record of it is the kind of bug nobody can attribute later.
+const warned = new Set<string>();
 const defaultWarn: Warn = (message) => {
-  if (__DEV__) console.warn(`[react-native-splatkit] ${message}`);
+  if (warned.has(message)) return;
+  warned.add(message);
+  console.warn(`[react-native-splatkit] ${message}`);
 };
 
 function clamped(
@@ -72,12 +78,17 @@ export function normalizeQuality(
   quality: QualityPreset | QualitySettings | undefined,
   warn: Warn = defaultWarn
 ): NativeQuality {
-  const settings: QualitySettings =
-    quality === undefined
-      ? {}
-      : typeof quality === 'string'
-        ? { preset: quality }
-        : quality;
+  let settings: QualitySettings;
+  if (quality == null) {
+    settings = {};
+  } else if (typeof quality === 'string') {
+    settings = { preset: quality };
+  } else if (typeof quality === 'object') {
+    settings = quality;
+  } else {
+    warn(`quality must be a preset name or an object, got ${typeof quality}`);
+    settings = {};
+  }
 
   let preset: QualityPreset = 'high';
   if (settings.preset !== undefined) {
@@ -103,7 +114,7 @@ export function normalizeQuality(
       'splatBudget',
       settings.splatBudget,
       0,
-      Number.MAX_SAFE_INTEGER,
+      INT32_MAX,
       true,
       warn
     ),

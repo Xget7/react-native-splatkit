@@ -3,6 +3,7 @@ package com.splatkit.reactnative
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -11,6 +12,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.CancellationException
+
+/** A stream plus its declared length, -1 when the source does not say. */
+internal typealias Opened = Pair<InputStream, Long>
 
 /**
  * Turns a source that is not already a file on disk into one, in the app's
@@ -21,38 +25,54 @@ import java.util.concurrent.CancellationException
  * The cache is keyed by the URI. A changed file behind the same URI is not
  * noticed; the README tells apps to bust it with a query string.
  *
- * Writes go to a `.part` file and are renamed at the end, so a crash or a
- * cancellation never leaves a truncated file behind that looks complete.
+ * Writes go to a `.part` file unique to this fetch and are renamed at the end,
+ * after the byte count matched what the source declared, so neither a crash,
+ * a cancellation nor a connection cut short leaves a file that looks complete.
+ *
+ * `http(s)` is handled here with the JDK alone; `asset://` and `content://`
+ * come through [platform] so the class can be tested on a plain JVM.
  */
-internal class SourceFetcher(private val context: Context) {
-    private val dir = File(context.cacheDir, "splatkit").apply {
-        mkdirs()
-        listFiles { f -> f.name.endsWith(".part") }?.forEach { it.delete() }
-    }
+internal class SourceFetcher(
+    cacheRoot: File,
+    private val platform: (String) -> Opened?,
+) {
+    constructor(context: Context) : this(context.cacheDir, AndroidSources(context))
+
+    private val dir = File(cacheRoot, "splatkit")
 
     @Volatile private var connection: HttpURLConnection? = null
+    @Volatile private var closed = false
+
+    init {
+        if (!dir.mkdirs() && !dir.isDirectory) Log.e(TAG, "cannot create the cache directory at $dir")
+        // Another view of this app may be writing its own .part right now, so
+        // only what nobody could still be writing is swept.
+        val stale = System.currentTimeMillis() - STALE_PART_MS
+        dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
+    }
 
     /** Called from any thread; makes a blocked network read fail promptly. */
     fun disconnect() {
+        closed = true
         connection?.disconnect()
     }
 
-    @Throws(IOException::class, InterruptedException::class)
+    @Throws(IOException::class)
     fun fetch(uri: String, cancelled: () -> Boolean, progress: (Long, Long) -> Unit): File {
         val target = File(dir, "${sha1(uri)}${extensionOf(uri)}")
         if (target.isFile && target.length() > 0) {
             progress(target.length(), target.length())
             return target
         }
-        val part = File(dir, "${target.name}.part")
         val (stream, total) = open(uri)
+        val part = File.createTempFile(target.name, ".part", dir)
         try {
+            var copied = 0L
             stream.use { input ->
                 FileOutputStream(part).use { output ->
                     val buffer = ByteArray(256 * 1024)
-                    var copied = 0L
                     while (true) {
-                        if (cancelled() || Thread.currentThread().isInterrupted) {
+                        if (closed || cancelled() || Thread.currentThread().isInterrupted) {
                             throw CancellationException("cancelled: $uri")
                         }
                         val n = input.read(buffer)
@@ -63,55 +83,91 @@ internal class SourceFetcher(private val context: Context) {
                     }
                 }
             }
-            if (!part.renameTo(target)) throw IOException("could not move ${part.name} into place")
+            if (total >= 0 && copied != total) {
+                throw IOException("truncated: got $copied of $total bytes for $uri")
+            }
+            if (!part.renameTo(target)) {
+                throw IOException("could not move the downloaded file into place at $target for $uri")
+            }
+            progress(copied, if (total >= 0) total else copied)
             return target
         } catch (e: Throwable) {
-            part.delete()
+            if (!part.delete() && part.exists()) Log.w(TAG, "could not delete ${part.name}")
             throw e
         } finally {
             connection = null
         }
     }
 
-    private fun open(uri: String): Pair<InputStream, Long> = when {
+    private fun open(uri: String): Opened = when {
+        uri.startsWith("http://") || uri.startsWith("https://") -> openHttp(uri)
+        else -> platform(uri) ?: throw IOException("unsupported source: $uri")
+    }
+
+    private fun openHttp(uri: String): Opened {
+        val c = (URL(uri).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 30_000
+            instanceFollowRedirects = true
+        }
+        connection = c
+        if (closed) {
+            c.disconnect()
+            throw CancellationException("cancelled: $uri")
+        }
+        val code = try {
+            c.responseCode
+        } catch (e: IOException) {
+            connection = null
+            throw e
+        }
+        if (code !in 200..299) {
+            c.disconnect()
+            connection = null
+            throw IOException("HTTP $code for $uri")
+        }
+        // A transparently decompressed body reports the compressed length, which
+        // the byte count can never match; treat it as unknown.
+        val total = if (c.contentEncoding.isNullOrEmpty()) c.contentLengthLong else -1L
+        return c.inputStream to total
+    }
+
+    companion object {
+        private const val TAG = "SplatKit"
+        private const val STALE_PART_MS = 60 * 60 * 1000L
+
+        /** The extension of the last path segment, before any query or fragment; empty when there is none. */
+        fun extensionOf(uri: String): String {
+            val name = uri.substringBefore('#').substringBefore('?').substringAfterLast('/')
+            val dot = name.lastIndexOf('.')
+            return if (dot > 0) name.substring(dot) else ""
+        }
+
+        fun sha1(text: String): String =
+            MessageDigest.getInstance("SHA-1").digest(text.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+    }
+}
+
+/** The sources only Android can open: app assets and content providers. */
+internal class AndroidSources(private val context: Context) : (String) -> Opened? {
+    override fun invoke(uri: String): Opened? = when {
         uri.startsWith("asset://") ->
             context.assets.open(uri.removePrefix("asset://")) to -1L
-
-        uri.startsWith("http://") || uri.startsWith("https://") -> {
-            val c = (URL(uri).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15_000
-                readTimeout = 30_000
-                instanceFollowRedirects = true
-            }
-            connection = c
-            val code = c.responseCode
-            if (code !in 200..299) {
-                c.disconnect()
-                throw IOException("HTTP $code for $uri")
-            }
-            c.inputStream to c.contentLengthLong
-        }
 
         uri.startsWith("${ContentResolver.SCHEME_CONTENT}://") -> {
             val parsed = Uri.parse(uri)
             val stream = context.contentResolver.openInputStream(parsed)
                 ?: throw IOException("the content provider returned nothing for $uri")
-            val length = runCatching {
+            val length = try {
                 context.contentResolver.openAssetFileDescriptor(parsed, "r")?.use { it.length } ?: -1L
-            }.getOrDefault(-1L)
+            } catch (e: Exception) {
+                Log.w("SplatKit", "no declared length for $uri", e)
+                -1L
+            }
             stream to length
         }
 
-        else -> throw IOException("unsupported source: $uri")
+        else -> null
     }
-
-    private fun extensionOf(uri: String): String {
-        val path = Uri.parse(uri).path ?: return ""
-        val dot = path.lastIndexOf('.')
-        return if (dot >= 0 && dot > path.lastIndexOf('/')) path.substring(dot) else ""
-    }
-
-    private fun sha1(text: String): String =
-        MessageDigest.getInstance("SHA-1").digest(text.toByteArray())
-            .joinToString("") { "%02x".format(it) }
 }

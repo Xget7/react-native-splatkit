@@ -3,6 +3,8 @@ package com.splatkit.reactnative
 import com.facebook.react.bridge.JavaOnlyMap
 import com.splatkit.RenderQuality
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -54,5 +56,38 @@ class QualityMapperTest {
     fun `missing keys mean unset too`() {
         val q = QualityMapper.fromMap(map("preset" to "ultra"), warnings::add)
         assertEquals(RenderQuality.ULTRA, q)
+    }
+
+    @Test
+    fun `linearBlending 0 turns the preset's blending off`() {
+        val q = QualityMapper.fromMap(map("preset" to "ultra", "linearBlending" to 0), warnings::add)
+        assertFalse(q.linearBlending)
+        assertEquals(RenderQuality.ULTRA.copy(linearBlending = false), q)
+        assertTrue(warnings.isEmpty())
+    }
+
+    @Test
+    fun `wrong types warn instead of throwing`() {
+        val q = QualityMapper.fromMap(
+            map("preset" to 42, "shDegree" to "two", "renderScale" to true, "linearBlending" to "yes"),
+            warnings::add,
+        )
+        assertEquals(RenderQuality.HIGH, q)
+        assertEquals(4, warnings.size)
+    }
+
+    @Test
+    fun `a negative value other than the sentinel is reported, not absorbed`() {
+        val q = QualityMapper.fromMap(map("preset" to "high", "renderScale" to -0.5, "shDegree" to -2), warnings::add)
+        assertEquals(RenderQuality.HIGH, q)
+        assertEquals(2, warnings.size)
+        assertNotEquals(RenderQuality.HIGH.copy(renderScale = -0.5f), q)
+    }
+
+    @Test
+    fun `an explicit null is unset`() {
+        val q = QualityMapper.fromMap(map("preset" to "medium").apply { putNull("renderScale") }, warnings::add)
+        assertEquals(RenderQuality.MEDIUM, q)
+        assertTrue(warnings.isEmpty())
     }
 }

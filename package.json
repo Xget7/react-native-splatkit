@@ -24,6 +24,7 @@
     "!android/gradlew",
     "!android/gradlew.bat",
     "!android/local.properties",
+    "!android/src/test",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -65,8 +66,7 @@
   "homepage": "https://github.com/Xget7/react-native-splatkit#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
-    "access": "public",
-    "tag": "alpha"
+    "access": "public"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",

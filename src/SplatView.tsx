@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import type { ViewProps } from 'react-native';
 import NativeSplatView, {
   Commands,
@@ -42,20 +42,6 @@ export type SplatViewHandle = {
   startBenchmark: (seconds?: number) => void;
 };
 
-/** One string per distinct quality value, so a literal that does not change is not renormalised. */
-function qualityKey(quality: SplatViewProps['quality']): string {
-  if (quality === undefined) return '';
-  if (typeof quality === 'string') return quality;
-  return [
-    quality.preset,
-    quality.renderScale,
-    quality.shDegree,
-    quality.splatBudget,
-    quality.cullMarginDegrees,
-    quality.linearBlending,
-  ].join('|');
-}
-
 /**
  * A walkable Gaussian splat world.
  *
@@ -86,11 +72,16 @@ const SplatViewComponent = forwardRef<SplatViewHandle, SplatViewProps>(
       []
     );
 
-    const key = qualityKey(quality);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const settings = useMemo(() => normalizeQuality(quality), [key]);
-
-    return <NativeSplatView ref={nativeRef} quality={settings} {...props} />;
+    // Normalised on every render: it is a handful of comparisons, Fabric diffs
+    // the struct by value, and the Android side skips a value it already
+    // applied, so a memo here would only add a dependency list to keep in sync.
+    return (
+      <NativeSplatView
+        ref={nativeRef}
+        quality={normalizeQuality(quality)}
+        {...props}
+      />
+    );
   }
 );
 

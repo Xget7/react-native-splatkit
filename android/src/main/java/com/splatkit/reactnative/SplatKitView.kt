@@ -173,11 +173,13 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
         failureEvent: String,
         hand: (File) -> Unit,
     ) {
-        if (uri.isNullOrEmpty()) return
+        // Bumped before the empty check so that clearing the prop also withdraws
+        // a load still in flight.
         val generation = generations.incrementAndGet()
+        if (uri.isNullOrEmpty()) return
         val stale = { generation != generations.get() }
         fileOf(uri)?.let { file ->
-            main.post { if (!stale()) hand(file) }
+            main.post { if (!stale() && !released) hand(file) }
             return
         }
         io.execute {
@@ -198,19 +200,17 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
                 }
             } catch (e: CancellationException) {
                 return@execute
-            } catch (e: InterruptedException) {
-                return@execute
             } catch (e: Exception) {
-                if (stale()) return@execute
+                if (stale() || released) return@execute
+                Log.w(TAG, "$kind failed: $uri", e)
                 main.post {
                     emit(failureEvent, Arguments.createMap().apply {
-                        putString("message", "${e.javaClass.simpleName}: ${e.message}")
+                        putString("message", "${e.javaClass.simpleName}: ${e.message ?: "no detail"} ($uri)")
                     })
                 }
                 return@execute
             }
-            if (stale()) return@execute
-            main.post { hand(file) }
+            main.post { if (!stale() && !released) hand(file) }
         }
     }
 
@@ -288,6 +288,8 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
     /** Called when React Native drops the view; the engine's resources go with it. */
     fun release() {
         released = true
+        worldGeneration.incrementAndGet()
+        colliderGeneration.incrementAndGet()
         statsTicking = false
         running = false
         main.removeCallbacksAndMessages(null)
@@ -315,8 +317,12 @@ class SplatKitView(private val reactContext: ThemedReactContext) :
 
     private fun emit(name: String, payload: WritableMap) {
         if (released) return
-        UIManagerHelper.getEventDispatcherForReactTag(reactContext, id)
-            ?.dispatchEvent(SplatEvent(UIManagerHelper.getSurfaceId(this), id, name, payload))
+        val dispatcher = UIManagerHelper.getEventDispatcherForReactTag(reactContext, id)
+        if (dispatcher == null) {
+            Log.w(TAG, "dropped $name: no event dispatcher for view $id")
+            return
+        }
+        dispatcher.dispatchEvent(SplatEvent(UIManagerHelper.getSurfaceId(this), id, name, payload))
     }
 }
 

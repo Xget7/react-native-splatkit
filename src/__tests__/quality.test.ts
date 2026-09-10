@@ -80,4 +80,48 @@ describe('normalizeQuality', () => {
     expect(q.cullMarginDegrees).toBe(UNSET);
     expect(warn).toHaveBeenCalledTimes(2);
   });
+
+  it('pins the unset sentinel to -1, which QualityMapper.kt hardcodes', () => {
+    expect(UNSET).toBe(-1);
+  });
+
+  it('sends an explicit false as 0, not unset', () => {
+    const q = normalizeQuality(
+      { preset: 'ultra', linearBlending: false },
+      noWarn
+    );
+    expect(q.linearBlending).toBe(0);
+  });
+
+  it('never emits a user value as the unset sentinel', () => {
+    const q = normalizeQuality(
+      {
+        preset: 'high',
+        renderScale: -1,
+        shDegree: -1,
+        splatBudget: -1,
+        cullMarginDegrees: -1,
+      },
+      noWarn
+    );
+    expect(q.renderScale).toBeGreaterThanOrEqual(0);
+    expect(q.shDegree).toBeGreaterThanOrEqual(0);
+    expect(q.splatBudget).toBeGreaterThanOrEqual(0);
+    expect(q.cullMarginDegrees).toBeGreaterThanOrEqual(0);
+  });
+
+  it('treats null like undefined and warns on a number', () => {
+    const warn = jest.fn();
+    expect(normalizeQuality(null as unknown as undefined, warn).preset).toBe(
+      'high'
+    );
+    expect(warn).not.toHaveBeenCalled();
+    expect(normalizeQuality(5 as unknown as 'high', warn).preset).toBe('high');
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps splatBudget at the 32 bit maximum', () => {
+    const q = normalizeQuality({ preset: 'high', splatBudget: 1e12 }, noWarn);
+    expect(q.splatBudget).toBe(2147483647);
+  });
 });

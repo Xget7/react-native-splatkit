@@ -103,12 +103,16 @@ class SplatViewManager :
     companion object {
         const val NAME = "SplatView"
 
+        /** A missing or null coordinate is 0 rather than a crash; the prop is typed, so this only guards the interop path. */
+        private fun ReadableMap.floatOrZero(key: String): Float =
+            if (hasKey(key) && !isNull(key)) getDouble(key).toFloat() else 0f
+
         private fun poseOf(map: ReadableMap) = CameraPose(
-            x = map.getDouble("x").toFloat(),
-            y = map.getDouble("y").toFloat(),
-            z = map.getDouble("z").toFloat(),
-            yaw = if (map.hasKey("yaw")) map.getDouble("yaw").toFloat() else 0f,
-            pitch = if (map.hasKey("pitch")) map.getDouble("pitch").toFloat() else 0f,
+            x = map.floatOrZero("x"),
+            y = map.floatOrZero("y"),
+            z = map.floatOrZero("z"),
+            yaw = map.floatOrZero("yaw"),
+            pitch = map.floatOrZero("pitch"),
         )
     }
 }

@@ -31,9 +31,10 @@ using namespace facebook::react;
   return self;
 }
 
-- (void)didMoveToWindow
+// Fabric hands over the emitter and attaches the view to a window in an
+// order it does not promise, so whichever happens last announces.
+- (void)announceIfReady
 {
-  [super didMoveToWindow];
   if (self.window == nil || _announced) {
     return;
   }
@@ -41,6 +42,18 @@ using namespace facebook::react;
     _announced = YES;
     emitter->onEngineReady({.available = false, .gpu = ""});
   }
+}
+
+- (void)didMoveToWindow
+{
+  [super didMoveToWindow];
+  [self announceIfReady];
+}
+
+- (void)updateEventEmitter:(const EventEmitter::Shared &)eventEmitter
+{
+  [super updateEventEmitter:eventEmitter];
+  [self announceIfReady];
 }
 
 - (void)prepareForRecycle
