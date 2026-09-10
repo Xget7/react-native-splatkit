@@ -1,6 +1,5 @@
 package com.splatkit.reactnative
 
-import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.uimanager.SimpleViewManager
@@ -86,12 +85,6 @@ class SplatViewManager :
 
     override fun startBenchmark(view: SplatKitView, seconds: Double) {
         view.startBenchmark(seconds.toFloat())
-    }
-
-    // The delegate routes commands on the new architecture; this keeps the view
-    // usable through the interop layer as well.
-    override fun receiveCommand(view: SplatKitView, command: String, args: ReadableArray?) {
-        delegate.receiveCommand(view, command, args)
     }
 
     // Codegen wires these on the new architecture; declaring them keeps the view

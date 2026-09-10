@@ -37,8 +37,8 @@ using namespace facebook::react;
   if (self.window == nil || _announced) {
     return;
   }
-  _announced = YES;
   if (auto emitter = std::static_pointer_cast<const SplatViewEventEmitter>(_eventEmitter)) {
+    _announced = YES;
     emitter->onEngineReady({.available = false, .gpu = ""});
   }
 }
