@@ -7,3 +7,5 @@ export type {
   QualityPreset,
   CameraPose,
 } from './SplatView';
+export { normalizeQuality, UNSET } from './quality';
+export type { NativeQuality } from './quality';

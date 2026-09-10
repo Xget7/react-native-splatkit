@@ -1,25 +1,26 @@
-import { forwardRef, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import type { ViewProps } from 'react-native';
 import NativeSplatView, {
   Commands,
   type NativeProps,
 } from './SplatViewNativeComponent';
+import {
+  normalizeQuality,
+  type QualityPreset,
+  type QualitySettings,
+} from './quality';
+import type { CameraPose } from './SplatViewNativeComponent';
 
-export type {
-  SplatSource,
-  QualitySettings,
-  CameraPose,
-} from './SplatViewNativeComponent';
-import type { QualitySettings, CameraPose } from './SplatViewNativeComponent';
-
-export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra';
+export type { SplatSource, CameraPose } from './SplatViewNativeComponent';
+export type { QualityPreset, QualitySettings } from './quality';
 
 export type SplatViewProps = Omit<NativeProps, keyof ViewProps | 'quality'> &
   ViewProps & {
     /**
      * A preset name, or a preset plus overrides:
      * `quality="medium"` or `quality={{ preset: 'medium', renderScale: 0.8 }}`.
-     * `high` when omitted.
+     * `high` when omitted. Out of range values are clamped with a warning in
+     * development; an unknown preset falls back to `high`.
      */
     quality?: QualityPreset | QualitySettings;
   };
@@ -41,33 +42,54 @@ export type SplatViewHandle = {
   startBenchmark: (seconds?: number) => void;
 };
 
+/** One string per distinct quality value, so a literal that does not change is not renormalised. */
+function qualityKey(quality: SplatViewProps['quality']): string {
+  if (quality === undefined) return '';
+  if (typeof quality === 'string') return quality;
+  return [
+    quality.preset,
+    quality.renderScale,
+    quality.shDegree,
+    quality.splatBudget,
+    quality.cullMarginDegrees,
+    quality.linearBlending,
+  ].join('|');
+}
+
 /**
  * A walkable Gaussian splat world.
  *
  * The view has to have a size; a `SurfaceView` with no height renders nothing
  * and reports no error, so give it `flex: 1` or explicit dimensions.
+ * Children are not laid out; put a HUD in a sibling view.
  */
 const SplatViewComponent = forwardRef<SplatViewHandle, SplatViewProps>(
   ({ quality, ...props }, ref) => {
-    const nativeRef = useRef<React.ElementRef<typeof NativeSplatView>>(null);
+    const nativeRef = useRef<React.ComponentRef<typeof NativeSplatView>>(null);
 
-    useImperativeHandle(ref, () => ({
-      setWalkVelocity(forward: number, right: number) {
-        if (nativeRef.current == null) return;
-        Commands.setWalkVelocity(nativeRef.current, forward, right);
-      },
-      setCameraPose({ x, y, z, yaw = 0, pitch = 0 }: CameraPose) {
-        if (nativeRef.current == null) return;
-        Commands.setCameraPose(nativeRef.current, x, y, z, yaw, pitch);
-      },
-      startBenchmark(seconds = 10) {
-        if (nativeRef.current == null) return;
-        Commands.startBenchmark(nativeRef.current, seconds);
-      },
-    }));
+    useImperativeHandle(
+      ref,
+      () => ({
+        setWalkVelocity(forward: number, right: number) {
+          if (nativeRef.current == null) return;
+          Commands.setWalkVelocity(nativeRef.current, forward, right);
+        },
+        setCameraPose({ x, y, z, yaw = 0, pitch = 0 }: CameraPose) {
+          if (nativeRef.current == null) return;
+          Commands.setCameraPose(nativeRef.current, x, y, z, yaw, pitch);
+        },
+        startBenchmark(seconds = 10) {
+          if (nativeRef.current == null) return;
+          Commands.startBenchmark(nativeRef.current, seconds);
+        },
+      }),
+      []
+    );
 
-    const settings =
-      typeof quality === 'string' ? { preset: quality } : quality;
+    const key = qualityKey(quality);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const settings = useMemo(() => normalizeQuality(quality), [key]);
+
     return <NativeSplatView ref={nativeRef} quality={settings} {...props} />;
   }
 );

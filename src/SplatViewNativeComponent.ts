@@ -29,24 +29,17 @@ type EngineReadyEvent = {
 };
 
 /**
- * How much the renderer spends per frame. `preset` picks the engine's
- * `RenderQuality.LOW`, `MEDIUM`, `HIGH` or `ULTRA`; every other field
- * overrides one value of that preset. Omit a field to keep the preset's.
- * The reason behind each preset and its frame times are in the engine's README.
+ * The fully populated quality struct the wrapper builds with `normalizeQuality`.
+ * Every field is present; -1 means "keep the preset's value". See `quality.ts`.
  */
-export type QualitySettings = {
-  /** `low`, `medium`, `high` (the default) or `ultra`. */
-  preset?: string;
-  /** Fraction of the surface the splats are drawn at, 0.1 to 2. Above 1 supersamples. */
-  renderScale?: CodegenTypes.Double;
-  /** Spherical harmonics degree drawn, 0 to 3, capped by what the world carries. Takes effect on the next frame. */
-  shDegree?: CodegenTypes.Int32;
-  /** Most splats drawn per frame through the level of detail tree; 0 draws them all. Applies to worlds loaded after it is set. */
-  splatBudget?: CodegenTypes.Int32;
-  /** Angular margin around the view kept drawn so a turn never meets an empty edge. */
-  cullMarginDegrees?: CodegenTypes.Double;
-  /** Blend in linear light instead of the encoded space the training used. */
-  linearBlending?: boolean;
+type NativeQualityStruct = {
+  preset: string;
+  renderScale: CodegenTypes.Double;
+  shDegree: CodegenTypes.Int32;
+  splatBudget: CodegenTypes.Int32;
+  cullMarginDegrees: CodegenTypes.Double;
+  /** -1 unset, 0 false, 1 true; codegen has no optional boolean with a sentinel. */
+  linearBlending: CodegenTypes.Int32;
 };
 
 /** Where the camera stands, in meters, and where it looks, in radians. */
@@ -64,6 +57,14 @@ type WorldReadyEvent = {
 
 type FailureEvent = {
   message: string;
+};
+
+type LoadProgressEvent = {
+  /** `world` or `collider`. */
+  kind: string;
+  bytes: CodegenTypes.Double;
+  /** -1 when the source does not say how big it is. */
+  total: CodegenTypes.Double;
 };
 
 type StatsEvent = {
@@ -87,7 +88,7 @@ export interface NativeProps extends ViewProps {
   collider?: SplatSource;
 
   /** Preset plus overrides; `high` with no overrides when omitted. */
-  quality?: QualitySettings;
+  quality?: NativeQualityStruct;
   /**
    * Where the camera starts. Applied when it changes and again when the world
    * and the collider become ready, so it can be set before the world loads.
@@ -108,6 +109,8 @@ export interface NativeProps extends ViewProps {
   onWorldFailed?: CodegenTypes.DirectEventHandler<FailureEvent>;
   onColliderReady?: CodegenTypes.DirectEventHandler<null>;
   onColliderFailed?: CodegenTypes.DirectEventHandler<FailureEvent>;
+  /** Bytes copied so far for a source that is not a local file; at most every 100 ms. */
+  onLoadProgress?: CodegenTypes.DirectEventHandler<LoadProgressEvent>;
   onStats?: CodegenTypes.DirectEventHandler<StatsEvent>;
 }
 
@@ -116,13 +119,13 @@ export type SplatViewNativeComponentType = HostComponent<NativeProps>;
 interface NativeCommands {
   /** Continuous walking in meters per second, for an on screen joystick. */
   setWalkVelocity: (
-    viewRef: React.ElementRef<SplatViewNativeComponentType>,
+    viewRef: React.ComponentRef<SplatViewNativeComponentType>,
     forward: CodegenTypes.Double,
     right: CodegenTypes.Double
   ) => void;
   /** Teleport: position in meters, yaw and pitch in radians. */
   setCameraPose: (
-    viewRef: React.ElementRef<SplatViewNativeComponentType>,
+    viewRef: React.ComponentRef<SplatViewNativeComponentType>,
     x: CodegenTypes.Double,
     y: CodegenTypes.Double,
     z: CodegenTypes.Double,
@@ -131,7 +134,7 @@ interface NativeCommands {
   ) => void;
   /** A reproducible turn; the frame time distribution lands in logcat under the tag SplatKit. */
   startBenchmark: (
-    viewRef: React.ElementRef<SplatViewNativeComponentType>,
+    viewRef: React.ComponentRef<SplatViewNativeComponentType>,
     seconds: CodegenTypes.Double
   ) => void;
 }
