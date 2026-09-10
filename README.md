@@ -109,6 +109,11 @@ Raise the floor with `expo-build-properties`:
 ["expo-build-properties", { "android": { "minSdkVersion": 29 } }]
 ```
 
+### Remote sources
+
+A release build refuses plain `http://` from Android 9 on, and the refusal arrives as `onWorldFailed` with "Cleartext HTTP traffic ... not permitted".
+Serve worlds over `https://`, or allow cleartext in the host app's manifest or network security config for development.
+
 ### Retrying, unloading, caching
 
 React Native resends a prop only when it changes, so after `onWorldFailed` a retry needs a new `uri` (a query string will do) or a new `key` on the view.
@@ -123,15 +128,17 @@ Put a HUD or a joystick in a sibling view, as the example does.
 
 ## Performance
 
-Measured on a Xiaomi Mi 9 (Adreno 640), the 500k splat World Labs kitchen, preset `medium`, same session, phone cooled between runs.
-The engine's own benchmark reports the numbers; the binding adds nothing to the frame.
+Measured on a Xiaomi Mi 9 (Adreno 640), the 500k splat World Labs kitchen with its collider, preset `medium`, release builds, camera at the origin, same session, phone cooled between runs.
+The engine's own benchmark reports the numbers (one turn over 10 s); the binding adds nothing to the frame.
 
-| Host | GPU ms p50 | frame ms | fps |
+| Host | GPU ms p50 | frame ms p50 | fps |
 |---|---|---|---|
-| Engine dev app | TBM | TBM | TBM |
-| This package, example app | TBM | TBM | TBM |
+| Engine dev app | 12.8 | 16.7 | 59.6 |
+| This package, example app | 12.8 | 16.7 | 59.6 |
 
-A remote world is streamed to disk and mapped, so loading a TBM MB file kept the Java heap under TBM MB.
+`statsInterval={16}`, one event per frame, measured the same frame time as `0`, so a HUD can run at any rate.
+A remote world is streamed to disk and mapped, so loading a 51 MB file (3.6 M splats) kept the Java heap under 8 MB; read into memory it peaked at 58 MB.
+Two views on one screen both render; expect the frame rate to split between them.
 The engine's numbers per preset and per scene are in [docs/BENCHMARKS.md](https://github.com/Xget7/splatkit-android/blob/main/docs/BENCHMARKS.md).
 
 ## iOS
