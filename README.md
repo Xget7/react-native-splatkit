@@ -47,7 +47,7 @@ The bytes never cross the bridge.
 JavaScript hands over a location and the native side reads it on a background thread, because a world is tens to hundreds of megabytes and serialising that would stall the app for as long as it took.
 
 `file://`, `content://`, `asset://` for a file in the app assets, `http://`, `https://`, or an absolute path.
-A file on disk goes to the engine as a path and is mapped, not copied through the Java heap; the other schemes are read to bytes first.
+A file on disk goes to the engine as a path and is mapped, not copied through the Java heap; the other schemes are streamed to the app's cache directory once and mapped from there, with `onLoadProgress` along the way.
 
 ### Props
 
@@ -55,10 +55,10 @@ A file on disk goes to the engine as a path and is mapped, not copied through th
 |---|---|
 | `source` | The world. SPZ versions 2 to 4; the format is detected from the bytes. |
 | `collider` | A GLB mesh. Switches the camera from flying to walking. |
-| `quality` | A preset name, `low`, `medium`, `high` (the default) or `ultra`, or a preset plus overrides: `{ preset: 'medium', renderScale: 0.8 }`. The overrides are `renderScale` (0.1 to 2, above 1 supersamples), `shDegree` (0 to 3, the harmonics degree drawn), `splatBudget` (0 draws all), `cullMarginDegrees` and `linearBlending`. The reason behind each preset and its frame times are in the [engine's README](https://github.com/Xget7/splatkit-android/blob/main/packages/splatkit-android/README.md). |
+| `quality` | A preset name, `low`, `medium`, `high` (the default) or `ultra`, or a preset plus overrides: `{ preset: 'medium', renderScale: 0.8 }`. The overrides are `renderScale` (0.1 to 2, above 1 supersamples), `shDegree` (0 to 3, rounded, the harmonics degree drawn), `splatBudget` (0 draws all), `cullMarginDegrees` (0 to 90) and `linearBlending`. Out of range values are clamped with a warning in development; an unknown preset falls back to `high`. The reason behind each preset and its frame times are in the [engine's README](https://github.com/Xget7/splatkit-android/blob/main/packages/splatkit-android/README.md). |
 | `cameraPose` | `{ x, y, z, yaw?, pitch? }`, meters and radians. Applied when it changes and again when the world and the collider become ready, so it can be set before the world loads. When walking the camera settles on the floor under the point. |
 | `motionEnabled` | The gyroscope drives the look direction. |
-| `lookSensitivity`, `walkSensitivity` | Gesture tuning. |
+| `lookSensitivity`, `walkSensitivity` | Gesture tuning. Radians per pixel for one finger looking (default 0.004) and meters per pixel for two finger walking (default 0.01). |
 | `statsInterval` | Milliseconds between `onStats`. 0, the default, turns the event off. |
 
 ### Events
@@ -66,12 +66,15 @@ A file on disk goes to the engine as a path and is mapped, not copied through th
 `onEngineReady` fires once with `{ available, gpu }`.
 When `available` is false the device could not start the renderer and the view stays blank; every other call is a no-op.
 
+`onLoadProgress` gives `{ kind, bytes, total }` at most every 100 ms while a source that is not a local file is being copied; `kind` is `world` or `collider` and `total` is -1 when the server did not say.
 `onWorldReady` gives `{ splatCount }`, `onWorldFailed` and `onColliderFailed` give `{ message }`, `onColliderReady` takes no payload, and `onStats` gives `{ fps, frameMs, gpuMs, sortMs, splatCount, pose }`, where `pose` is the camera as of the last frame in the shape of `cameraPose`.
 Read it to save a viewpoint and hand it back later.
 
 ### Imperative
 
 ```tsx
+import { SplatView, type SplatViewHandle } from 'react-native-splatkit';
+
 const splat = useRef<SplatViewHandle>(null);
 
 splat.current?.setWalkVelocity(forward, right);          // meters per second, for a joystick
@@ -79,11 +82,56 @@ splat.current?.setCameraPose({ x: 0, y: 1.5, z: 0 });    // teleport; yaw and pi
 splat.current?.startBenchmark(10);                       // a reproducible turn, timings in logcat
 ```
 
-## Requirements
+## Requirements and setup
 
-New architecture only.
-Android 10 (API 29) and a Vulkan 1.1 device, `arm64-v8a` only: the engine ships that ABI alone, so an x86_64 emulator installs and then dies on the first frame.
-Develop on a physical arm64 device.
+React Native 0.85 or newer with the New Architecture (the default since 0.76); there is no interop layer support.
+Android 10 (API 29) and a Vulkan 1.1 device.
+
+In `android/build.gradle` of the app set the floor the engine needs:
+
+```groovy
+ext {
+    minSdkVersion = 29
+}
+```
+
+The library pins 29 itself, so a lower app floor fails at build time with this package's name in the message rather than at runtime.
+
+The engine ships `arm64-v8a` only.
+An app that builds every ABI still installs on an x86_64 emulator and then dies on the first frame, so develop on a physical arm64 device, or keep the emulator from installing it at all with `reactNativeArchitectures=arm64-v8a` in `android/gradle.properties`.
+
+### Expo
+
+Works in a development build, not in Expo Go.
+Raise the floor with `expo-build-properties`:
+
+```json
+["expo-build-properties", { "android": { "minSdkVersion": 29 } }]
+```
+
+### Retrying, unloading, caching
+
+React Native resends a prop only when it changes, so after `onWorldFailed` a retry needs a new `uri` (a query string will do) or a new `key` on the view.
+The engine has no unload call yet; setting `source` to `undefined` leaves the current world in place.
+Sources that are not local files are copied once to the app's cache directory, keyed by URI, and mapped from there; a changed file behind the same URI is not noticed, so change the URI or clear the app cache.
+
+### Children
+
+`SplatView` does not lay out React children.
+Put a HUD or a joystick in a sibling view, as the example does.
+
+## Performance
+
+Measured on a Xiaomi Mi 9 (Adreno 640), the 500k splat World Labs kitchen, preset `medium`, same session, phone cooled between runs.
+The engine's own benchmark reports the numbers; the binding adds nothing to the frame.
+
+| Host | GPU ms p50 | frame ms | fps |
+|---|---|---|---|
+| Engine dev app | TBM | TBM | TBM |
+| This package, example app | TBM | TBM | TBM |
+
+A remote world is streamed to disk and mapped, so loading a TBM MB file kept the Java heap under TBM MB.
+The engine's numbers per preset and per scene are in [docs/BENCHMARKS.md](https://github.com/Xget7/splatkit-android/blob/main/docs/BENCHMARKS.md).
 
 ## iOS
 
