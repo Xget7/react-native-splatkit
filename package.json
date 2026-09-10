@@ -1,6 +1,6 @@
 {
   "name": "react-native-splatkit",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "React Native component for real-time Gaussian splatting: load an SPZ scene, pick a quality preset, and walk through it from JavaScript.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -17,9 +17,7 @@
     "lib",
     "android",
     "ios",
-    "cpp",
     "*.podspec",
-    "react-native.config.js",
     "!ios/build",
     "!android/build",
     "!android/gradle",
@@ -36,7 +34,8 @@
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
     "prepare": "bob build",
     "typecheck": "tsc",
-    "lint": "eslint \"**/*.{js,ts,tsx}\""
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "test": "jest"
   },
   "keywords": [
     "react-native",
@@ -56,12 +55,18 @@
   },
   "author": "Juan Tupa <juanieltupa@gmail.com> (https://github.com/Xget7)",
   "license": "MIT",
+  "sideEffects": false,
+  "engines": {
+    "node": ">= 22.11.0"
+  },
   "bugs": {
     "url": "https://github.com/Xget7/react-native-splatkit/issues"
   },
   "homepage": "https://github.com/Xget7/react-native-splatkit#readme",
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public",
+    "tag": "alpha"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",
@@ -83,8 +88,8 @@
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
+    "react": ">=19.0.0",
+    "react-native": ">=0.85.0"
   },
   "workspaces": [
     "example"
@@ -110,7 +115,7 @@
   },
   "codegenConfig": {
     "name": "SplatViewSpec",
-    "type": "all",
+    "type": "components",
     "jsSrcsDir": "src",
     "android": {
       "javaPackageName": "com.splatkit.reactnative"
