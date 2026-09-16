@@ -1,114 +1,89 @@
-# react-native-splatkit
+# SplatKit React Native
 
-React Native component for real-time Gaussian splatting.
-Load an SPZ scene, put a `<SplatView />` in a tree, pick a quality preset, and walk through it from JavaScript.
+Fabric view for the SplatKit Metal and Vulkan renderers, with one renderer policy contract across JS and both native adapters.
+Experimental alpha: not published to npm, and APIs change before 1.0.
+React Native 0.87.1 is the Codegen baseline, not a tested app compatibility claim.
 
-```sh
-npm install react-native-splatkit
-```
+## Status
 
-## What this package is
-
-A binding, and nothing more.
-The renderer lives in [SplatKit](https://github.com/Xget7/splatkit-android), an Android engine published to Maven Central, and this package depends on it the way any Android app would:
-
-```gradle
-api "io.github.xget7:splatkit-android:0.1.0-alpha04"
-```
-
-There is no C++ here, no shaders, no copy of the engine.
-A fix to the renderer is a new version of that artifact, not a release of this package, and an Android developer can work on the engine without ever installing Node.
-
-## Use it
-
-```tsx
-import { SplatView } from 'react-native-splatkit';
-
-<SplatView
-  style={StyleSheet.absoluteFill}
-  source={{ uri: 'file:///sdcard/Download/world.spz' }}
-  collider={{ uri: 'file:///sdcard/Download/collider.glb' }}
-  quality="medium"
-  onEngineReady={(e) => console.log(e.nativeEvent.gpu)}
-  onWorldReady={(e) => console.log(e.nativeEvent.splatCount, 'splats')}
-/>;
-```
-
-The view has to have a size.
-A surface with no height renders nothing and reports no error, so give it `flex: 1` or explicit dimensions.
-
-One finger looks around, two fingers walk, a double tap toggles the gyroscope.
-Without a collider the camera flies; with one it walks on the mesh.
-World Labs exports both files for every world.
-
-### Sources
-
-The bytes never cross the bridge.
-JavaScript hands over a location and the native side reads it on a background thread, because a world is tens to hundreds of megabytes and serialising that would stall the app for as long as it took.
-
-`file://`, `content://`, `asset://` for a file in the app assets, `http://`, `https://`, or an absolute path.
-A file on disk goes to the engine as a path and is mapped, not copied through the Java heap; the other schemes are read to bytes first.
-
-### Props
-
-| Prop | What it does |
-|---|---|
-| `source` | The world. SPZ versions 2 to 4; the format is detected from the bytes. |
-| `collider` | A GLB mesh. Switches the camera from flying to walking. |
-| `quality` | A preset name, `low`, `medium`, `high` (the default) or `ultra`, or a preset plus overrides: `{ preset: 'medium', renderScale: 0.8 }`. The overrides are `renderScale` (0.1 to 2, above 1 supersamples), `shDegree` (0 to 3, the harmonics degree drawn), `splatBudget` (0 draws all), `cullMarginDegrees` and `linearBlending`. The reason behind each preset and its frame times are in the [engine's README](https://github.com/Xget7/splatkit-android/blob/main/packages/splatkit-android/README.md). |
-| `cameraPose` | `{ x, y, z, yaw?, pitch? }`, meters and radians. Applied when it changes and again when the world and the collider become ready, so it can be set before the world loads. When walking the camera settles on the floor under the point. |
-| `motionEnabled` | The gyroscope drives the look direction. |
-| `lookSensitivity`, `walkSensitivity` | Gesture tuning. |
-| `statsInterval` | Milliseconds between `onStats`. 0, the default, turns the event off. |
-
-### Events
-
-`onEngineReady` fires once with `{ available, gpu }`.
-When `available` is false the device could not start the renderer and the view stays blank; every other call is a no-op.
-
-`onWorldReady` gives `{ splatCount }`, `onWorldFailed` and `onColliderFailed` give `{ message }`, `onColliderReady` takes no payload, and `onStats` gives `{ fps, frameMs, gpuMs, sortMs, splatCount, pose }`, where `pose` is the camera as of the last frame in the shape of `cameraPose`.
-Read it to save a viewpoint and hand it back later.
-
-### Imperative
-
-```tsx
-const splat = useRef<SplatViewHandle>(null);
-
-splat.current?.setWalkVelocity(forward, right);          // meters per second, for a joystick
-splat.current?.setCameraPose({ x: 0, y: 1.5, z: 0 });    // teleport; yaw and pitch optional
-splat.current?.startBenchmark(10);                       // a reproducible turn, timings in logcat
-```
-
-## Requirements
-
-New architecture only.
-Android 10 (API 29) and a Vulkan 1.1 device, `arm64-v8a` only: the engine ships that ABI alone, so an x86_64 emulator installs and then dies on the first frame.
-Develop on a physical arm64 device.
-
-## iOS
-
-The component, its props and its events exist on iOS and compile, but there is no engine behind them yet.
-`onEngineReady` reports `available: false`, which is the same signal an Android device without Vulkan gives, so an app that already handles that case needs no extra branch.
-
-iOS will link a published SplatKit package the same way Android links the AAR.
-Copying a renderer into this repository would defeat the point of the split.
-
-## Running the example
-
-The example reads a world off the device rather than committing one:
+The package builds inside the [SplatKit repository](https://github.com/Xget7/splatkit-android), where the [RN dev app](https://github.com/Xget7/splatkit-android/tree/main/apps/react-native-dev) mounts it on Android.
+The Android adapter links SplatKit's `:splatkit` Gradle project, and the pod expects the `splatkit-ios` sources beside the package.
+Standalone installs outside that repository are not supported yet.
+Android runs the policy prop, capability and policy events on a physical Mi 9 (Adreno 640); rejected policy events are host-tested only.
+iOS compiles against the simulator SDK; device execution is pending.
+Changes are listed in the [changelog](CHANGELOG.md).
 
 ```sh
-adb push kitchen.spz /sdcard/Android/data/splatkit.example/files/world.spz
-adb push kitchen.glb /sdcard/Android/data/splatkit.example/files/collider.glb
-yarn && yarn example android
+npm ci
+npm run check
 ```
 
-That is the app's own directory, so it needs no runtime permission.
-Reading `/sdcard/Download` instead means asking for `READ_EXTERNAL_STORAGE`, which is the host app's decision to make, not this package's.
+## Use
 
-Everything from the engine logs under the tag `SplatKit`.
-MIUI hides application logs until `adb shell setprop persist.log.tag.SplatKit V`.
+```ts
+import {SplatKitBuilder, SplatKitView, toNativePolicyProp, toNativeViewProps} from '@splatkit/react-native';
 
-## License
+const config = new SplatKitBuilder()
+  .withWorld({
+    requestId: 'lobby-1',
+    filePath: '/absolute/path/lobby.spz',
+    maxShDegree: 3,
+  })
+  .withPreset('high')
+  .withPerformance({lodBudgetSplats: 2_500_000})
+  .build(hostCapabilities);
 
-MIT.
+hostLogger.warn(config.performance.diagnostics);
+const props = toNativeViewProps(config);
+const policy = toNativePolicyProp(config, revision);
+// <SplatKitView {...props} policy={policy} onPolicyEvent={...} onCapabilities={...} />
+```
+
+`build()` preserves the complete requested policy and separately reports effective values and warnings.
+Effective means resolved Fabric props, not an acknowledgment of native applied state; `onPolicyEvent` is that acknowledgment.
+The bridge expresses `world`, `paused`, `renderScale`, `shDegree` and the versioned renderer `policy`.
+LOD and residency capacities are carried inside `world`, so changing either requires a new world request.
+Render scale, draw SH degree and both splat capacities have one authority in `withPerformance()`.
+`withWorld()` accepts world identity, file path and load-time maximum SH degree, while `withRender()` accepts only `paused`.
+This is an intentional pre-1.0 change from passing capacities to `withWorld()` or scale and SH to `withRender()`.
+
+Presets are provisional SDK defaults and install complete values:
+
+| Preset | Render scale | SH degree | LOD budget | Residency budget |
+| --- | ---: | ---: | ---: | ---: |
+| `highEnd` | 1.25 | 3 | 4,000,000 | 4,000,000 |
+| `high` | 1.0 | 3 | 3,000,000 | 3,000,000 |
+| `balanced` | 0.85 | 2 | 2,000,000 | 2,000,000 |
+| `performance` | 0.65 | 1 | 1,000,000 | 1,000,000 |
+
+Calling `withPreset()` replaces the current policy with that preset.
+Calling `withPerformance()` applies manual overrides to the current preset and marks the request `manual`.
+Budgets count splats, including each splat's loaded SH payload, and are not byte or memory guarantees.
+Host-supplied limits can clamp valid budget requests and the world's maximum loaded SH degree can cap draw SH.
+Every fallback is reported in `diagnostics`.
+Malformed numbers, invalid enum values and unknown options fail instead of degrading.
+
+Raster strategy, tile size, LOD error, thresholds, culling, early termination and sort depth travel in the `policy` prop.
+Give each changed policy a new positive Int32 revision; 0 or less means no policy.
+An effective policy field holds a value only when native capabilities say the adapter applies it.
+Other fields stay `null` and warn `native-option-fallback`, or `native-support-unknown` before capabilities are known, when the request differs from the native default.
+`targetFps` is optional, always resolves to `null` and does not enable dynamic quality.
+`nativeCapabilitiesFromEvent()` turns `onCapabilities` into the snapshot `build()` accepts.
+That event arrives once per engine, and each world load creates one, so build the first configuration with host limits and rebuild when it arrives.
+Even when a snapshot identifies a possible fallback, the bridge does not claim the native renderer applied it.
+
+## Native adapters
+
+Native applies each new revision, and re-applies the current one to every new engine, then reports it in `onPolicyEvent`.
+`applied` means the whole request landed, `warning` means a field fell back and `rejected` means the previous policy stayed.
+Every event carries the effective policy; a rejection's `errorCode` is `INVALID_POLICY` or `POLICY_PREPARATION_FAILED`.
+
+Install the pod with `SplatKitReactNative.podspec`, and link the `splatkit-ios` native library.
+The pod requires iOS 17 and React Native 0.87 Codegen.
+
+Both adapters decode off the render thread, tag world events with the load that produced them and drop stale events, and emit the shared failure codes `INVALID_REQUEST`, `WORLD_LOAD_FAILED` and `GPU_UNAVAILABLE`.
+Both re-validate the policy prop: an unknown raster or sort depth is invalid, never a silent default.
+The iOS adapter throttles stats snapshots to 2 Hz and releases its engine and display link on recycle, invalidate and background.
+The Android adapter isolates each accepted replacement in its own engine.
+Vulkan applies sort depth and the sub-pixel threshold with GPU visibility; Metal applies sort depth with GPU sort and the sub-pixel threshold only under tight culling.
+A clean external consumer and iOS device execution remain release gates.
