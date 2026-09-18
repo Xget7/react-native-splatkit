@@ -1,7 +1,7 @@
 {
   "LICENSE": "0d53b878fa23d675c2e62010d4e4fb417ba6eff00b609d47dc72ea5cf14d7aa7",
   "CHANGELOG.md": "d05edf0496bf5f612745b48772e08d675fd10a7d25a275e1472ae8f1bc05d82a",
-  "README.md": "89822b9fb06f529c9e1f071f2a6c6090bbdc34f493560cae949a477e94dcb979",
+  "README.md": "c23473af1e150c3d1fc0586f7654d7526d32fb320175fad2941290e01b88fc92",
   "SplatKitReactNative.podspec": "2076966087d968bd222966e36c1628c309748ef63e00ab899c95dbcc0956851e",
   "android/README.md": "951f3ce174b21e14a5de3698cedfacc8d3719fff3742048e1d3ef7013bdded28",
   "android/build.gradle": "100b42a676f937d2c02b3e69ad5c232758e51b5f43bf7ce3204ab5679ef0f4d2",
@@ -17,7 +17,7 @@
   "android/verification/gradle.properties": "52cdd01539bb49aa5b314a231fb05518f039e0fc1d9ef3a073b4891c8ab22f8b",
   "android/verification/settings.gradle": "7ecda7d00420611c94b8cfd5c4f95e933f56af25912dc5f6fe416f7c0de634ec",
   ".github/workflows/contract.yml": "9e881fd23882de6ba2aaaf7a2efd72840e21aa34d59cecb18332161093bd538f",
-  ".github/workflows/publish.yml": "8d26dd2b0c690abd0b6e0ae2c3a3f911309e477122b3cf7df9bd38b6ca2a591e",
+  ".github/workflows/publish.yml": "9f49be22dda0dcd675f58908d58a04031db3f59ba1d5945342a708893fd2ee51",
   ".gitignore": "716004f25a2302c2d4f71a61fce4c864fc4a1af27938f89257b887abad3d3636",
   "AGENTS.md": "0e40dc9908d7764debf65aa9a021b3be72d97c8cb885c01bc43ea08b906e773e",
   "CONTRIBUTING.md": "41bac423ae88c0782abff83d083297d48b831b9643033153dc469781106fa20f",
