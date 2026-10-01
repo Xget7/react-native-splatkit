@@ -25,7 +25,7 @@
   "android/verification/build.gradle": "08d0df9f60df6a332b1d64a120e286573d81cfcc4c37e8ecf659258db8387495",
   "android/verification/gradle.properties": "52cdd01539bb49aa5b314a231fb05518f039e0fc1d9ef3a073b4891c8ab22f8b",
   "android/verification/settings.gradle": "7ecda7d00420611c94b8cfd5c4f95e933f56af25912dc5f6fe416f7c0de634ec",
-  ".github/workflows/contract.yml": "9e881fd23882de6ba2aaaf7a2efd72840e21aa34d59cecb18332161093bd538f",
+  ".github/workflows/contract.yml": "be56ebf58fa834c03f5721d93a16d7d9c7bdab1f337169e8aefb35f407ac8c7a",
   ".github/workflows/publish.yml": "823dcf952ea1d059498f63e9317484a49f5acc3ec01487ce2d70df3aa8ad4fca",
   ".gitignore": "716004f25a2302c2d4f71a61fce4c864fc4a1af27938f89257b887abad3d3636",
   "AGENTS.md": "63175abdee09ca9c2103cac6e4d6d49729a30714d140ef078bb4c3d21939fccb",
