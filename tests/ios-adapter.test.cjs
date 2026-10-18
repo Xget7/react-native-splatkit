@@ -43,6 +43,8 @@ test('iOS adapter applies the versioned policy prop and reports it by revision',
   const native = fs.readFileSync(path.join(root, 'ios/SplatKitRNView.mm'), 'utf8');
   assert.match(mm, /next\.policy\.revision/);
   assert.match(mm, /setPolicy:policy revision:/);
+  // Only the fields the backend reports as supported leave the fallback.
+  assert.match(mm, /policy = device->fallback;[\s\S]*if \(support\.subpixelThreshold\) policy\.subpixelThreshold/);
   assert.match(mm, /onPolicyEvent/);
   assert.match(mm, /onCapabilities/);
   // A world load applies the stored policy itself, so a combined update applies it once.
@@ -75,7 +77,7 @@ test('iOS adapter exposes navigation as props, commands and collider events', ()
 // it to that many splats: the world rendered or vanished depending on the stack.
 test('iOS adapter value initializes the C structs it fills from props', () => {
   const mm = fs.readFileSync(path.join(root, 'ios/SplatKitViewComponentView.mm'), 'utf8');
-  for (const type of ['SKRenderPolicy', 'SKCharacterSettings']) {
+  for (const type of ['SKRenderPolicy', 'SKCharacterSettings', 'SKLensSettings']) {
     assert.match(mm, new RegExp(`${type} \\w+\\{\\}`), `${type} must be value initialized`);
     assert.doesNotMatch(mm, new RegExp(`${type} \\w+;`), `${type} must not be left indeterminate`);
   }
@@ -133,4 +135,12 @@ test('iOS wire phase constants spell the values the JS contracts declare', () =>
   assert.deepEqual(spelled('Collider'), Object.values(ColliderPhase).sort());
   assert.deepEqual(spelled('Camera'), Object.values(CameraPhase).sort());
   assert.deepEqual(spelled('Policy'), Object.values(PolicyPhase).sort());
+});
+
+// The lens is checked before the current world is released, then set on the engine the load
+// creates before its decode is queued.
+test('iOS adapter validates the lens up front and sets it before the decode', () => {
+  const native = fs.readFileSync(path.join(root, 'ios/SplatKitRNView.mm'), 'utf8');
+  assert.match(native, /\[SKSplatEngine acceptsLens:lens\][\s\S]*?\[self dispose\]/);
+  assert.match(native, /if \(!\[engine setLens:lens\]\) \{[\s\S]*?kErrorInvalidRequest[\s\S]*?return;\s*\}\s*_engine = engine;[\s\S]*loadWorldFile/);
 });

@@ -484,8 +484,9 @@ static const uint32_t kAllRasterStrategiesMask = 0b111;
 
 - (void)loadWorld:(NSString *)path requestId:(NSString *)requestId kind:(NSInteger)kind
       maxShDegree:(NSInteger)maxShDegree lodCapacity:(NSInteger)lodCapacity
-residencyCapacity:(NSInteger)residencyCapacity {
-  if (![self validateRequestId:requestId path:path kind:kind maxShDegree:maxShDegree]) {
+residencyCapacity:(NSInteger)residencyCapacity lens:(SKLensSettings)lens {
+  if (![self validateRequestId:requestId path:path kind:kind maxShDegree:maxShDegree] ||
+      ![SKSplatEngine acceptsLens:lens]) {
     [self emitWorld:requestId phase:kWorldPhaseFailed count:0 code:kErrorInvalidRequest
              message:@"invalid world request"];
     return;
@@ -500,6 +501,11 @@ residencyCapacity:(NSInteger)residencyCapacity {
   if (engine == nil) {
     [self emitWorld:requestId phase:kWorldPhaseFailed count:0 code:kErrorGpuUnavailable
              message:@"Metal is unavailable on this device"];
+    return;
+  }
+  if (![engine setLens:lens]) {
+    [self emitWorld:requestId phase:kWorldPhaseFailed count:0 code:kErrorInvalidRequest
+             message:@"the engine refused the lens"];
     return;
   }
   _engine = engine;

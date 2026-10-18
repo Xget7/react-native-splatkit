@@ -122,6 +122,21 @@ test('a world is one file unless it names a tileset, which keeps its residency b
   }
 });
 
+test('a world carries its lens to the native props and the build validates it', () => {
+  const lens = {fieldOfViewDegrees: 30, nearPlane: 0.05, farPlane: 4};
+  const config = new SplatKitBuilder().withWorld({...world, ...lens}).build(capabilities);
+  assert.deepEqual(
+    {fieldOfViewDegrees: config.world.fieldOfViewDegrees, nearPlane: config.world.nearPlane,
+      farPlane: config.world.farPlane}, lens);
+  assert.equal(toNativeViewProps(config).world.farPlane, lens.farPlane);
+  assert.throws(
+    () => new SplatKitBuilder().withWorld({...world, fieldOfViewDegrees: 5}).build(capabilities),
+    RangeError);
+  assert.throws(
+    () => new SplatKitBuilder().withWorld({...world, nearPlane: 0.05}).build(capabilities),
+    TypeError);
+});
+
 test('clamps valid requests to supplied limits and reports each fallback', () => {
   const limited = {
     ...capabilities,
@@ -231,7 +246,7 @@ const nativeCapabilitiesEvent = Object.freeze({
   policyTileSize: false,
   policyLodErrorPixels: false,
   policyAlphaThreshold: false,
-  policySubpixelThreshold: true,
+  policySubpixelThreshold: false,
   policyEnableFrustumCulling: false,
   policyEnableHiZOcclusion: false,
   policyEnableEarlyTermination: false,
@@ -249,13 +264,13 @@ test('native capabilities resolve the requested policy against what the adapter 
 
   // Supported fields reach the effective policy with their real values, not null.
   assert.equal(config.performance.effective.sortDepth, 16);
-  assert.equal(config.performance.effective.subpixelThreshold, 0.75);
   // Supported-by-contract numeric budgets are unchanged.
   assert.equal(config.performance.effective.lodBudgetSplats, 2_000_000);
   // Unsupported fields stay null and warn once each with the native fallback code.
   assert.equal(config.performance.effective.raster, null);
   assert.equal(config.performance.effective.alphaThreshold, null);
-  for (const option of ['raster', 'alphaThreshold']) {
+  assert.equal(config.performance.effective.subpixelThreshold, null);
+  for (const option of ['raster', 'alphaThreshold', 'subpixelThreshold']) {
     assert(config.performance.diagnostics.some(diagnostic =>
       diagnostic.option === option && diagnostic.code === 'native-option-fallback'));
   }
@@ -269,18 +284,16 @@ test('every preset rasterizes in hardware; hybrid tiles are an explicit choice',
   }
 });
 
-test('a raster mask applies only the strategies native builds', () => {
+test('a hardware-only raster mask resolves every other strategy to the fallback', () => {
   const metal = nativeCapabilitiesFromEvent({...nativeCapabilitiesEvent, policyRaster: true,
-    policyRasterMask: 0b101});
-  assert.deepEqual(metal.policy.rasterStrategies, ['hardware', 'hybrid']);
-  const hybrid = new SplatKitBuilder().withWorld(world).withPerformance({raster: 'hybrid'})
-    .build(metal);
-  assert.equal(hybrid.performance.effective.raster, 'hybrid');
-  const computeTile = new SplatKitBuilder().withWorld(world)
-    .withPerformance({raster: 'computeTile'}).build(metal);
-  assert.equal(computeTile.performance.effective.raster, null);
-  assert(computeTile.performance.diagnostics.some(item =>
-    item.option === 'raster' && item.code === 'native-option-fallback'));
+    policyRasterMask: 0b001});
+  assert.deepEqual(metal.policy.rasterStrategies, ['hardware']);
+  for (const raster of ['hybrid', 'computeTile']) {
+    const config = new SplatKitBuilder().withWorld(world).withPerformance({raster}).build(metal);
+    assert.equal(config.performance.effective.raster, null, raster);
+    assert(config.performance.diagnostics.some(item =>
+      item.option === 'raster' && item.code === 'native-option-fallback'), raster);
+  }
 });
 
 test('builds the versioned native policy prop from the requested values', () => {
