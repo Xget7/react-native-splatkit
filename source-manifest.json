@@ -43,7 +43,7 @@
   "scripts/codegen-android.cjs": "60caadd2ec7a6f006f8af85616a635cf25e73e0903b5d0b60f482ccc2b07452c",
   "scripts/codegen.cjs": "189ad31bc1cefcbc367cfad32c2ce884d75e2bf103402b6c1055861a8b1cab06",
   "scripts/fetch-ios-xcframework.cjs": "64d933421b368ea3a4920520bfc73da4573b8882cbcb9b5cff9b30a326581876",
-  "scripts/ios-xcframework.json": "fd39a3b15d320f4781d55e19cd5e43d4e967549ae00026b082f934bf68d04de1",
+  "scripts/ios-xcframework.json": "2842137d128ddab72871708c941fb8b92701ef5eba4cee82be1d3ef7801187d4",
   "scripts/patch-braces.cjs": "45eae82000848bd7410dd2a09ef29c27ed24c432bef4762ce75fd1e047f10666",
   "scripts/patches/braces-3.0.3/backport.cjs": "4c16d6654e34d9232d65e1f7a551ce2e814b4eee228682d2198bf2ce0de61fbc",
   "scripts/patches/braces-3.0.3/validate-depth.js": "74aae6d19942b66ecd8e3d138038a8b0add05974b508b1d046a839634db894f1",
